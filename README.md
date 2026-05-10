@@ -1,36 +1,60 @@
-# Lun (論)
+```
+      ╦   ╦ ╦ ╔╗╔
+      ║   ║ ║ ║║║
+      ╩═╝ ╚═╝ ╝╚╝
+```
 
-> Multi-agent consensus for better decisions.
+# One question. Three minds. Better decisions.
 
-Ask multiple AI coding agents the same question simultaneously, compare their answers side-by-side, and optionally synthesize a combined recommendation.
+> AI한테 물어봤는데 확신이 안 서?
+> 세 명한테 동시에 물어보고 비교해.
+
+[![npm](https://img.shields.io/npm/v/lun?style=flat-square)](https://www.npmjs.com/package/lun)
+[![license](https://img.shields.io/github/license/soonsoon2/lun?style=flat-square)](LICENSE)
+
+---
+
+## What is Lun?
+
+**Lun (論)** is a CLI tool that asks multiple AI coding agents the same question in parallel and shows you their answers side-by-side — so you can spot consensus, catch blind spots, and make better design decisions.
 
 ```
 $ lun "Should I use REST or GraphQL for this API?"
 
   Lun — Asking kiro, claude, copilot...
 
-  v Kiro           4.2s (auto)
-  v Claude Code    3.8s (sonnet)
-  v GitHub Copilot 5.1s (auto)
-
   --- Kiro (4.2s, auto) ---
-  REST is more appropriate here because...
+  REST is the better fit here. Your API is resource-oriented
+  with simple CRUD operations, and REST gives you caching,
+  standard HTTP semantics, and simpler client code...
 
-  --- Claude Code (3.8s, sonnet) ---
-  I'd recommend GraphQL for this use case...
+  --- Claude (3.8s, sonnet) ---
+  I'd lean toward GraphQL. You mentioned multiple frontend
+  clients with different data needs — GraphQL's flexible
+  queries avoid over-fetching and reduce round trips...
 
-  --- GitHub Copilot (5.1s, auto) ---
-  Consider a hybrid approach...
+  --- Copilot (5.1s, auto) ---
+  Consider a hybrid: REST for public endpoints, GraphQL
+  for your internal dashboard that needs flexible queries...
+
+  ────────────────────────────────────────────────────────
 ```
 
-## Why
+**Results stream in as each agent finishes.** No waiting for the slowest one.
 
-When making design decisions, a single AI opinion can be misleading. Lun gives you multiple perspectives in seconds, so you can spot consensus, identify blind spots, and make informed choices.
+---
 
-- **Compare** — See where agents agree and disagree
-- **Synthesize** — Auto-generate a summary of all opinions (`--summarize`)
-- **Integrate** — JSON output mode for agent-to-agent workflows (`--json`)
-- **Record** — Every session saved as `.md` and `.json` for future reference
+## Why?
+
+A single AI opinion can be confidently wrong. When you're making decisions that matter — architecture, tech stack, API design — you want multiple perspectives:
+
+- **2 out of 3 agree?** → Higher confidence
+- **All 3 disagree?** → The problem needs more thought
+- **One has a unique angle?** → You might have missed something
+
+Lun makes this a 10-second habit instead of a 10-minute tab-switching ritual.
+
+---
 
 ## Install
 
@@ -38,173 +62,171 @@ When making design decisions, a single AI opinion can be misleading. Lun gives y
 npm install -g lun
 ```
 
-**Prerequisites:** At least one of these CLI agents must be installed:
+You need at least one AI agent CLI installed:
 
-| Agent | Install |
-|-------|---------|
-| [Kiro CLI](https://kiro.dev/docs/cli) | `npm i -g kiro-cli` |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` |
-| [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) | `gh extension install github/gh-copilot` |
+| Agent | Install | What you get |
+|-------|---------|--------------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Anthropic's reasoning |
+| [GitHub Copilot](https://docs.github.com/copilot) | `gh extension install github/gh-copilot` | OpenAI/GPT models |
+| [Kiro CLI](https://kiro.dev/docs/cli) | `npm i -g kiro-cli` | AWS-backed multi-model |
+
+---
 
 ## Quick Start
 
 ```bash
-# First-time setup (language, agents, models)
+# First time — pick language, agents, models
 lun --init
 
-# Ask all agents
+# Ask all agents (results stream as they arrive)
 lun "How should I structure this microservice?"
 
-# Interactive mode (REPL)
+# Interactive mode — keep asking
 lun
 
-# Pipe content as context
-cat architecture.md | lun "Review this design"
+# Specific models for deeper analysis
+lun -M claude:opus,copilot:gpt-4.1 "Review this architecture"
 
-# With synthesis
-lun -s "Compare Redis vs Memcached for session storage"
+# Pipe a file as context
+cat design.md | lun "What are the risks here?"
+
+# Auto-synthesize all answers into one recommendation
+lun -s "Redis vs Memcached for session storage?"
 ```
 
-## Usage
+---
 
-```
-lun [options] [prompt]
-```
+## For Agent Integration
 
-### Modes
-
-| Command | Description |
-|---------|-------------|
-| `lun` | Interactive REPL — type questions, get multi-agent answers |
-| `lun "prompt"` | One-shot — ask once, get answers, exit |
-| `cat file \| lun "review"` | Pipe — include file content as context |
-
-### Options
-
-| Flag | Description |
-|------|-------------|
-| `-P, --providers <list>` | Comma-separated providers (e.g. `kiro,claude`) |
-| `-M, --models <list>` | Per-provider models (e.g. `claude:opus,copilot:gpt-4.1`) |
-| `-s, --summarize` | Add a synthesis of all answers |
-| `-j, --json` | JSON output (for agent integration) |
-| `-t, --timeout <sec>` | Timeout in seconds (default: 120) |
-| `-l, --list` | Show available providers |
-| `-H, --sessions` | List saved sessions |
-| `-v, --version` | Version |
-| `-h, --help` | Help |
-
-### Setup
-
-| Command | Description |
-|---------|-------------|
-| `lun --init` | Interactive first-time setup |
-| `lun --config` | View current configuration |
-
-## JSON Output (Agent Integration)
-
-Use `--json` for NDJSON streaming — results arrive as each agent finishes:
+Other AI agents can call lun and parse the output:
 
 ```bash
 lun -j "Should I use a monorepo?"
 ```
 
+Outputs NDJSON (one event per line, results stream as they arrive):
+
 ```jsonl
-{"event":"start","providers":["kiro","claude","copilot"],"models":{"kiro":"auto","claude":"sonnet","copilot":"auto"}}
+{"event":"start","providers":["kiro","claude","copilot"]}
 {"event":"chunk","provider":"claude","delta":"I'd recommend..."}
-{"event":"result","provider":"claude","model":"sonnet","text":"Full response...","elapsed":3.8,"error":false}
-{"event":"result","provider":"kiro","model":"auto","text":"Full response...","elapsed":5.2,"error":false}
-{"event":"result","provider":"copilot","model":"auto","text":"Full response...","elapsed":12.1,"error":false}
+{"event":"result","provider":"claude","model":"sonnet","text":"...","elapsed":3.8,"error":false}
+{"event":"result","provider":"kiro","model":"auto","text":"...","elapsed":5.2,"error":false}
+{"event":"result","provider":"copilot","model":"auto","text":"...","elapsed":12.1,"error":false}
 {"event":"done","total":3,"errors":0}
 ```
 
-Results stream in as they complete — no need to wait for the slowest agent.
+### Tell your agent to use lun
 
-## Setup Rules for Your Project
+Add to your project's agent rules, or just say:
 
-Install lun consultation rules so your AI agents know how to use lun:
+> "Use `lun -j "question"` to get opinions from other AI agents before making this decision."
+
+Or auto-install rules for all agents:
 
 ```bash
-cd your-project
 lun --setup-rules
 ```
 
-This interactively installs rule files for each agent:
+This creates rule files for Claude (`CLAUDE.md`), Kiro (`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`), Gemini, and Codex.
 
-| Agent | File |
-|-------|------|
-| Claude Code | `CLAUDE.md` |
-| Kiro | `.kiro/steering/lun.md` |
-| Copilot | `.github/copilot-instructions.md` |
-| Gemini | `.gemini/AGENTS.md` |
-| Codex/OpenAI | `AGENTS.md` |
+---
 
-After setup, your agents will know to run `lun -j "question"` when they need multi-agent opinions.
+## All Options
+
+```
+lun [options] [prompt]
+
+Modes:
+  lun                        Interactive (REPL)
+  lun "prompt"               One-shot
+  cat file | lun "review"    Pipe context
+
+Options:
+  -P, --providers <list>     Agents to use (kiro,claude,copilot)
+  -M, --models <list>        Models (claude:opus,copilot:gpt-4.1)
+  -s, --summarize            Synthesize all answers
+  -j, --json                 NDJSON streaming output
+  -t, --timeout <sec>        Timeout (default: 120)
+
+Info:
+  -l, --list                 Available providers
+  -H, --sessions             Saved sessions
+  -v, --version              Version
+  -h, --help                 Help
+
+Setup:
+  --init                     First-time config
+  --config                   View config
+  --setup-rules              Install agent rules in project
+```
+
+---
 
 ## Sessions
 
-Every query is automatically saved to `~/.lun/sessions/`:
+Every conversation is auto-saved to `~/.lun/sessions/` as both `.md` (human-readable) and `.json` (machine-parseable).
 
-- **`.json`** — Structured data for programmatic access
-- **`.md`** — Human-readable markdown for review or sharing
-
-View recent sessions:
 ```bash
+# View recent sessions
 lun --sessions
+
+# Sessions are at:
+~/.lun/sessions/2026-05-09T15-30-22.md
+~/.lun/sessions/2026-05-09T15-30-22.json
 ```
+
+---
 
 ## Web UI
 
-Lun also includes a local web interface with a group-chat style UI:
+Lun also has a local web interface with a group-chat style UI:
 
 ```bash
-# Start the web server
-npm start
-# or
 node server.js
-
-# Open http://localhost:3456
+# → http://localhost:3456
 ```
+
+Features: real-time streaming, session history sidebar, per-agent model settings.
+
+---
 
 ## Configuration
 
-Config is stored at `~/.lun/config.json`:
+Stored at `~/.lun/config.json`:
 
 ```json
 {
   "language": "en",
   "providers": ["kiro", "claude", "copilot"],
-  "models": {
-    "kiro": "auto",
-    "claude": "sonnet",
-    "copilot": "auto"
-  },
+  "models": { "kiro": "auto", "claude": "sonnet", "copilot": "auto" },
   "timeout": 120
 }
 ```
 
-## Adding Providers
+---
 
-Providers are defined in `src/providers.js`. To add a new agent:
+## Adding a Provider
+
+Edit `src/providers.js`:
 
 ```javascript
-export const PROVIDERS = {
-  // ...existing providers
-  myagent: {
-    name: "My Agent",
-    bin: "myagent-cli",
-    defaultModel: "default",
-    installHint: "npm i -g myagent-cli",
-    buildArgs: (prompt, model, opts) => ["-p", prompt, "--model", model],
-    env: { TERM: "dumb" },
-    getModels: () => [{ id: "default", label: "default" }],
-  },
-};
+myagent: {
+  name: "My Agent",
+  bin: "myagent-cli",
+  defaultModel: "default",
+  installHint: "npm i -g myagent",
+  buildArgs: (prompt, model, opts) => ["-p", prompt, "--model", model],
+  env: { TERM: "dumb" },
+  getModels: () => [{ id: "default", label: "default" }],
+},
 ```
+
+---
 
 ## Requirements
 
 - Node.js >= 18
-- At least one supported AI CLI agent installed and authenticated
+- At least one AI agent CLI installed and authenticated
 
 ## License
 
