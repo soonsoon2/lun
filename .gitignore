@@ -1,0 +1,6 @@
+node_modules/
+_data/
+.DS_Store
+*.log
+raw_capture.json
+.gemini/
