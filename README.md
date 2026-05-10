@@ -4,10 +4,10 @@
       ╩═╝ ╚═╝ ╝╚╝
 ```
 
-# One question. Three minds. Better decisions.
+# One question. Multiple minds. Better decisions.
 
-> AI한테 물어봤는데 확신이 안 서?
-> 세 명한테 동시에 물어보고 비교해.
+> Not sure about that AI answer?
+> Ask multiple agents at once and compare.
 
 [![npm](https://img.shields.io/npm/v/lun?style=flat-square)](https://www.npmjs.com/package/lun)
 [![license](https://img.shields.io/github/license/soonsoon2/lun?style=flat-square)](LICENSE)
@@ -17,6 +17,8 @@
 ## What is Lun?
 
 **Lun (論)** is a CLI tool that asks multiple AI coding agents the same question in parallel and shows you their answers side-by-side — so you can spot consensus, catch blind spots, and make better design decisions.
+
+Currently supports **3 agents** (Kiro, Claude Code, GitHub Copilot) with more coming soon.
 
 ```
 $ lun "Should I use REST or GraphQL for this API?"
@@ -69,6 +71,8 @@ You need at least one AI agent CLI installed:
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Anthropic's reasoning |
 | [GitHub Copilot](https://docs.github.com/copilot) | `gh extension install github/gh-copilot` | OpenAI/GPT models |
 | [Kiro CLI](https://kiro.dev/docs/cli) | `npm i -g kiro-cli` | AWS-backed multi-model |
+
+> **More agents coming soon** — Gemini, Codex, and others are planned. Adding a new provider is a single file edit in `src/providers.js`.
 
 ---
 
