@@ -533,7 +533,32 @@ app.get("/ws", { websocket: true }, (socket, req) => {
   });
 });
 
-await app.listen({ port: PORT, host: HOST });
+await app.listen({ port: PORT, host: HOST }).catch(async (err) => {
+  if (err.code === "EADDRINUSE") {
+    // Try next ports
+    for (let p = PORT + 1; p < PORT + 10; p++) {
+      try {
+        await app.listen({ port: p, host: HOST });
+        console.log(`
+\x1b[36m  ╦   ╦ ╦ ╔╗╔
+  ║   ║ ║ ║║║
+  ╩═╝ ╚═╝ ╝╚╝\x1b[0m
+
+  \x1b[1mLun\x1b[0m web UI running
+  \x1b[90mLocal:\x1b[0m   http://${HOST}:${p}
+  \x1b[33mNote:\x1b[0m    port ${PORT} was busy, using ${p}
+  \x1b[90mDocs:\x1b[0m    lun --help
+  \x1b[90mCtrl+C\x1b[0m   to stop
+`);
+        return;
+      } catch {}
+    }
+    console.error(`\x1b[31m  Error: ports ${PORT}-${PORT + 9} all in use\x1b[0m`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 console.log(`
 \x1b[36m  ╦   ╦ ╦ ╔╗╔
   ║   ║ ║ ║║║
