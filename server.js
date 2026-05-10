@@ -215,7 +215,33 @@ app.get("/api/providers", async () => {
 // ============================================================
 app.get("/api/sessions", async () => {
   const { listSessions } = await import("./src/session.js");
-  return { sessions: listSessions(20) };
+  const { SESSIONS_DIR } = await import("./src/config.js");
+  return { sessions: listSessions(20), path: SESSIONS_DIR };
+});
+
+// ============================================================
+// API: GET /api/sessions/:id
+// ============================================================
+app.get("/api/sessions/:id", async (req) => {
+  const { SESSIONS_DIR } = await import("./src/config.js");
+  const filePath = join(SESSIONS_DIR, `${req.params.id}.json`);
+  if (!existsSync(filePath)) return { error: "not found" };
+  try {
+    return JSON.parse(readFileSync(filePath, "utf-8"));
+  } catch { return { error: "parse error" }; }
+});
+
+// ============================================================
+// API: GET /api/provider-models
+// ============================================================
+app.get("/api/provider-models", async () => {
+  const result = {};
+  for (const [id, def] of Object.entries(PROVIDERS)) {
+    if (checkAvailable(id)) {
+      result[id] = def.getModels ? def.getModels() : [];
+    }
+  }
+  return { models: result };
 });
 
 // ============================================================
