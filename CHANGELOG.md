@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] — 2026-05-10
+
+### Added
+- **Streaming output** — results appear as each agent finishes (no more waiting for slowest)
+- **NDJSON streaming** (`--json`) — emits `start`, `chunk`, `result`, `done` events line-by-line
+- **Real-time chunks** — `onChunk` callback streams partial output as agents generate
+- **`--setup-rules`** — auto-install lun consultation rules into any project
+- **Agent rule templates** — pre-built rules for Claude, Kiro, Copilot, Gemini, Codex (`rules/`)
+- **Session auto-save** — every query (one-shot or interactive) saved to `~/.lun/sessions/`
+
+### Changed
+- Human mode now prints each agent's response immediately when ready (race pattern)
+- JSON mode switched from single JSON blob to NDJSON streaming
+- Calling agent can start processing first result without waiting for all
+
+### Fixed
+- `selectFromList` redraw bug (duplicate rendering)
+- Unavailable agents now auto-skipped with warning instead of error
+
 ## [1.0.0] — 2026-05-09
 
 ### Added

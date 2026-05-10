@@ -4,3 +4,4 @@ _data/
 *.log
 raw_capture.json
 .gemini/
+.vscode/

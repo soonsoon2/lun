@@ -10,6 +10,8 @@ import { Session, listSessions } from "../src/session.js";
 import { t } from "../src/i18n.js";
 import { printBanner, selectFromList, promptText, Progress, VERSION } from "../src/ui.js";
 import { createInterface } from "readline";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
 
 // ============================================================
 // ARGS
@@ -26,6 +28,7 @@ for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === "--init") { await cmdInit(); process.exit(0); }
   if (a === "--config") { cmdConfig(); process.exit(0); }
+  if (a === "--setup-rules") { await cmdSetupRules(); process.exit(0); }
   if (a === "--providers" || a === "-P") { cliProviders = args[++i]?.split(",").map(s => s.trim()).filter(Boolean); }
   else if (a === "--models" || a === "-M") {
     for (const pair of (args[++i] || "").split(",")) { const [p, m] = pair.split(":"); if (p && m) cliModels[p.trim()] = m.trim(); }
@@ -150,6 +153,7 @@ function cmdHelp() {
   \x1b[1mSetup:\x1b[0m
     lun --init                 First-time configuration
     lun --config               View current config
+    lun --setup-rules          Install lun rules into current project
 
   \x1b[1mExamples:\x1b[0m
     lun "REST vs GraphQL?"
@@ -164,6 +168,64 @@ function printInstallHelp() {
   console.log(`    kiro:    https://kiro.dev/docs/cli`);
   console.log(`    claude:  npm i -g @anthropic-ai/claude-code`);
   console.log(`    copilot: gh extension install github/gh-copilot`);
+}
+
+// ============================================================
+// SETUP RULES — install lun rule files into current project
+// ============================================================
+async function cmdSetupRules() {
+  printBanner();
+  console.log(`  \x1b[1mSetup agent rules for this project\x1b[0m\n`);
+  console.log(`  This will add lun consultation rules so your AI agents`);
+  console.log(`  know how to use lun for multi-agent opinions.\n`);
+
+  const cwd = process.cwd();
+  const rulesDir = new URL("../rules/", import.meta.url).pathname;
+
+  const targets = [
+    { id: "claude", file: "claude.md", dest: "CLAUDE.md", append: true, desc: "Claude Code (CLAUDE.md)" },
+    { id: "kiro", file: "kiro.md", dest: ".kiro/steering/lun.md", append: false, desc: "Kiro (.kiro/steering/lun.md)" },
+    { id: "copilot", file: "copilot.md", dest: ".github/copilot-instructions.md", append: true, desc: "Copilot (.github/copilot-instructions.md)" },
+    { id: "gemini", file: "gemini.md", dest: ".gemini/AGENTS.md", append: true, desc: "Gemini (.gemini/AGENTS.md)" },
+    { id: "codex", file: "codex.md", dest: "AGENTS.md", append: true, desc: "Codex / OpenAI (AGENTS.md)" },
+  ];
+
+  for (const target of targets) {
+    const destPath = join(cwd, target.dest);
+    const srcPath = join(rulesDir, target.file);
+    const exists = existsSync(destPath);
+
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise(resolve => {
+      const action = exists && target.append ? "append to" : "create";
+      rl.question(`  ${action} ${target.desc}? (y/n) `, resolve);
+    });
+    rl.close();
+
+    if (answer.trim().toLowerCase() === "y") {
+      const content = readFileSync(srcPath, "utf-8");
+      const dir = join(cwd, target.dest.split("/").slice(0, -1).join("/"));
+      if (dir && dir !== cwd) mkdirSync(dir, { recursive: true });
+
+      if (exists && target.append) {
+        const existing = readFileSync(destPath, "utf-8");
+        if (!existing.includes("lun")) {
+          writeFileSync(destPath, existing + "\n\n" + content);
+          console.log(`    \x1b[32mv\x1b[0m Appended to ${target.dest}`);
+        } else {
+          console.log(`    \x1b[90m- Already contains lun rules, skipped\x1b[0m`);
+        }
+      } else {
+        mkdirSync(join(cwd, target.dest.split("/").slice(0, -1).join("/")), { recursive: true });
+        writeFileSync(destPath, content);
+        console.log(`    \x1b[32mv\x1b[0m Created ${target.dest}`);
+      }
+    } else {
+      console.log(`    \x1b[90m- Skipped\x1b[0m`);
+    }
+  }
+
+  console.log(`\n  \x1b[32mDone.\x1b[0m Your agents can now use lun for consultations.\n`);
 }
 
 // ============================================================
@@ -262,42 +324,67 @@ async function main() {
   }
 
   // One-shot mode
-  if (!jsonOutput) {
-    const list = activeProviders.map(p => { const m = activeModels[p]; return m && m !== "auto" ? `${p}(${m})` : p; }).join(", ");
-    console.log(`\n\x1b[90m  Lun — ${t("asking", list)}\x1b[0m`);
-  }
-
-  const progress = new Progress(activeProviders, jsonOutput);
-  progress.start();
-  for (const pid of activeProviders) progress.update(pid, "run");
-
-  const results = await Promise.all(activeProviders.map(async (pid) => {
-    try {
-      const r = await runProvider(pid, fullPrompt, { model: activeModels[pid], timeout: activeTimeout });
-      progress.update(pid, "done", { elapsed: r.elapsed, model: activeModels[pid] || "auto" });
-      return r;
-    } catch (err) {
-      progress.update(pid, "error");
-      return { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
-    }
-  }));
-
-  progress.finish();
-
-  // Output
   if (jsonOutput) {
-    console.log(JSON.stringify({
-      prompt: fullPrompt, timestamp: new Date().toISOString(),
-      results: results.map(r => ({ provider: r.provider, model: activeModels[r.provider] || "auto", text: r.text, elapsed: r.elapsed, error: !!r.error })),
-    }, null, 2));
-  } else {
-    for (const r of results) {
-      const name = PROVIDERS[r.provider]?.name || r.provider;
-      const model = activeModels[r.provider] || "auto";
-      console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
-      console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
-    }
+    // NDJSON streaming — emit results as they arrive
+    console.log(JSON.stringify({ event: "start", providers: activeProviders, models: activeModels, timestamp: new Date().toISOString() }));
 
+    const results = [];
+    await Promise.all(activeProviders.map(async (pid) => {
+      try {
+        const r = await runProvider(pid, fullPrompt, {
+          model: activeModels[pid], timeout: activeTimeout,
+          onChunk: (provider, delta) => {
+            console.log(JSON.stringify({ event: "chunk", provider, delta }));
+          },
+        });
+        const result = { provider: r.provider, model: activeModels[pid] || "auto", text: r.text, elapsed: r.elapsed, error: false };
+        results.push(result);
+        console.log(JSON.stringify({ event: "result", ...result }));
+      } catch (err) {
+        const result = { provider: pid, model: activeModels[pid] || "auto", text: `[Error] ${err.message}`, elapsed: 0, error: true };
+        results.push(result);
+        console.log(JSON.stringify({ event: "result", ...result }));
+      }
+    }));
+
+    console.log(JSON.stringify({ event: "done", total: results.length, errors: results.filter(r => r.error).length }));
+
+    // Save session
+    const session = new Session();
+    session.addTurn(fullPrompt, results);
+
+  } else {
+    // Human mode — streaming display
+    const list = activeProviders.map(p => { const m = activeModels[p]; return m && m !== "auto" ? `${p}(${m})` : p; }).join(", ");
+    console.log(`\n\x1b[90m  Lun — ${t("asking", list)}\x1b[0m\n`);
+
+    // Show all providers as "waiting"
+    const status = Object.fromEntries(activeProviders.map(p => [p, "waiting"]));
+    const completed = [];
+
+    // Print results as they arrive (race pattern)
+    const promises = activeProviders.map(async (pid) => {
+      const name = PROVIDERS[pid]?.name || pid;
+      const model = activeModels[pid] || "auto";
+      try {
+        const r = await runProvider(pid, fullPrompt, { model: activeModels[pid], timeout: activeTimeout });
+        // Print immediately when done
+        console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
+        console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
+        completed.push(r);
+        return r;
+      } catch (err) {
+        console.log(`\x1b[31m  --- ${name} (failed) ---\x1b[0m`);
+        console.log(`  ${err.message}\n`);
+        const r = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
+        completed.push(r);
+        return r;
+      }
+    });
+
+    const results = await Promise.all(promises);
+
+    // Summarize
     if (summarize && results.filter(r => !r.error).length > 1) {
       console.log(`\x1b[33m  --- ${t("summary_title")} ---\x1b[0m`);
       console.log(`  \x1b[90m${t("summarizing")}\x1b[0m`);
@@ -311,7 +398,9 @@ async function main() {
       } catch (e) { console.log(`  \x1b[31m${e.message}\x1b[0m\n`); }
     }
 
-    // Save as session (one-shot = 1 turn session)
+    console.log(`\x1b[90m  ────────────────────────────────────────────────────────\x1b[0m\n`);
+
+    // Save session
     const session = new Session();
     session.addTurn(fullPrompt, results.map(r => ({ ...r, model: activeModels[r.provider] || "auto" })));
   }

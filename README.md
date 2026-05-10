@@ -102,23 +102,43 @@ lun [options] [prompt]
 
 ## JSON Output (Agent Integration)
 
-Use `--json` when another agent needs to consume Lun's output:
+Use `--json` for NDJSON streaming — results arrive as each agent finishes:
 
 ```bash
 lun -j "Should I use a monorepo?"
 ```
 
-```json
-{
-  "prompt": "Should I use a monorepo?",
-  "timestamp": "2026-05-09T06:30:00.000Z",
-  "results": [
-    { "provider": "kiro", "model": "auto", "text": "...", "elapsed": 4.2, "error": false },
-    { "provider": "claude", "model": "sonnet", "text": "...", "elapsed": 3.8, "error": false },
-    { "provider": "copilot", "model": "auto", "text": "...", "elapsed": 5.1, "error": false }
-  ]
-}
+```jsonl
+{"event":"start","providers":["kiro","claude","copilot"],"models":{"kiro":"auto","claude":"sonnet","copilot":"auto"}}
+{"event":"chunk","provider":"claude","delta":"I'd recommend..."}
+{"event":"result","provider":"claude","model":"sonnet","text":"Full response...","elapsed":3.8,"error":false}
+{"event":"result","provider":"kiro","model":"auto","text":"Full response...","elapsed":5.2,"error":false}
+{"event":"result","provider":"copilot","model":"auto","text":"Full response...","elapsed":12.1,"error":false}
+{"event":"done","total":3,"errors":0}
 ```
+
+Results stream in as they complete — no need to wait for the slowest agent.
+
+## Setup Rules for Your Project
+
+Install lun consultation rules so your AI agents know how to use lun:
+
+```bash
+cd your-project
+lun --setup-rules
+```
+
+This interactively installs rule files for each agent:
+
+| Agent | File |
+|-------|------|
+| Claude Code | `CLAUDE.md` |
+| Kiro | `.kiro/steering/lun.md` |
+| Copilot | `.github/copilot-instructions.md` |
+| Gemini | `.gemini/AGENTS.md` |
+| Codex/OpenAI | `AGENTS.md` |
+
+After setup, your agents will know to run `lun -j "question"` when they need multi-agent opinions.
 
 ## Sessions
 

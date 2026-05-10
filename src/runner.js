@@ -42,7 +42,7 @@ export function runProvider(providerId, prompt, options = {}) {
   const providerDef = PROVIDERS[providerId];
   if (!providerDef) return Promise.reject(new Error(`Unknown provider: ${providerId}`));
 
-  const { model, sessionId: resumeSessionId, cwd, timeout = 120000 } = options;
+  const { model, sessionId: resumeSessionId, cwd, timeout = 120000, onChunk } = options;
 
   return new Promise((resolve, reject) => {
     let effectiveSessionId = resumeSessionId || null;
@@ -83,7 +83,15 @@ export function runProvider(providerId, prompt, options = {}) {
     let stdout = "";
     let stderr = "";
 
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+    child.stdout.on("data", (chunk) => {
+      const text = chunk.toString();
+      stdout += text;
+      // Stream chunks to callback if provided
+      if (onChunk) {
+        const cleaned = stripAnsi(text).trim();
+        if (cleaned) onChunk(providerId, cleaned);
+      }
+    });
     child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
     child.on("error", (err) => reject(err));
     child.on("close", (code) => {
