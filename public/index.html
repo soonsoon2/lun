@@ -305,6 +305,15 @@
       scroll();
     }
 
+    function addSystemMsg(text) {
+      hideWelcome();
+      const row = el("div", "msg-row ai");
+      row.style.maxWidth = "100%";
+      row.innerHTML = `<div style="padding:6px 12px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid var(--border);font-size:11px;color:var(--text-muted);font-style:italic;">${esc(text)}</div>`;
+      chatArea.appendChild(row);
+      scroll();
+    }
+
     function addTyping(pid) {
       hideWelcome();
       if (document.getElementById(`typing-${pid}`)) return;
@@ -351,15 +360,16 @@
     // ===== SESSIONS =====
     async function loadSessions() {
       try {
-        const res = await fetch("/api/threads");
+        const res = await fetch("/api/sessions");
         const data = await res.json();
-        const threads = data.threads || [];
-        if (!threads.length) { sessionList.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:11px;text-align:center;">No sessions yet</div>'; return; }
+        const sessions = data.sessions || [];
+        if (!sessions.length) { sessionList.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:11px;text-align:center;">No sessions yet</div>'; return; }
         sessionList.innerHTML = "";
-        for (const t of threads.slice(0, 20)) {
+        for (const s of sessions) {
           const div = el("div", "session-item");
-          const date = new Date(t.created).toLocaleDateString("en", {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
-          div.innerHTML = `<div class="title">${esc(t.title||"(untitled)")}</div><div class="meta">${date}</div>`;
+          const date = s.date ? new Date(s.date).toLocaleDateString("en", {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "";
+          const prompt = s.firstPrompt || "(untitled)";
+          div.innerHTML = `<div class="title">${esc(prompt)}</div><div class="meta">${date} · ${s.turns} turns</div>`;
           sessionList.appendChild(div);
         }
       } catch {}
@@ -383,6 +393,7 @@
             break;
           case "provider-thinking": addTyping(msg.provider); break;
           case "provider-response": addAiMsg(msg.provider, msg.text, msg.elapsed); break;
+          case "system": addSystemMsg(msg.text); break;
           case "done":
             isWaiting = false; statusDot.className = "dot ready";
             input.disabled = false; sendBtn.disabled = false; input.focus();

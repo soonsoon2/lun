@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] — 2026-05-10
+
+### Added
+- **Web UI moderator integration** — web chat now uses smart routing (search → capable agents only)
+- **System messages in web UI** — shows routing decisions and skip notifications
+- **Session API** (`GET /api/sessions`) — web UI loads sessions from `~/.lun/sessions/`
+- **Unified session storage** — both CLI and Web save to the same `~/.lun/sessions/` directory
+- **Auto-save on web** — every web conversation auto-saved as .md + .json
+
+### Changed
+- Web UI session list now reads from `~/.lun/sessions/` (shared with CLI)
+- Web "all" mode replaced with moderator-driven routing
+- Removed legacy `_data/threads/` dependency for new sessions
+
 ## [1.2.0] — 2026-05-10
 
 ### Added

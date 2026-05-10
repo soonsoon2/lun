@@ -8,6 +8,8 @@ import { dirname, join } from "path";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, appendFileSync, readdirSync, statSync } from "fs";
 import { PROVIDERS, checkAvailable } from "./src/providers.js";
 import { runProvider, runAll, stripAnsi, cleanOutput } from "./src/runner.js";
+import { moderatedQuery, detectIntent } from "./src/moderator.js";
+import { Session } from "./src/session.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
@@ -209,6 +211,14 @@ app.get("/api/providers", async () => {
 });
 
 // ============================================================
+// API: GET /api/sessions
+// ============================================================
+app.get("/api/sessions", async () => {
+  const { listSessions } = await import("./src/session.js");
+  return { sessions: listSessions(20) };
+});
+
+// ============================================================
 // API: GET /api/models
 // ============================================================
 app.get("/api/models", async () => {
@@ -350,42 +360,40 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             }
           }
 
-          // "all" mode: run all providers in PARALLEL
+          // "all" mode: moderated multi-agent query
           if (provider === "all") {
             socket.send(JSON.stringify({ type: "thinking" }));
-            const allProviders = ["kiro", "claude", "copilot"];
+            const availableProviders = Object.keys(PROVIDERS).filter(checkAvailable);
 
-            // Start all at once
-            for (const pid of allProviders) {
-              socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
-            }
-
-            const userText = text;
-            const promises = allProviders.map(async (pid) => {
-              const pDef = PROVIDERS[pid];
-              const sid = sessionOptions.keepSession ? providerSessions[pid] : null;
-              try {
-                const result = await runProvider(pid, userText, {
-                  model: sessionOptions.model,
-                  sessionId: sid,
-                  cwd: sessionOptions.cwd,
-                });
-                // Update session ID for next turn
-                if (sessionOptions.keepSession && result.sessionId) providerSessions[pid] = result.sessionId;
-                socket.send(JSON.stringify({ type: "provider-response", provider: pid, text: result.text, elapsed: result.elapsed }));
-                return { provider: pid, text: result.text };
-              } catch (err) {
-                const errMsg = `[Error] ${err.message}`;
-                socket.send(JSON.stringify({ type: "provider-response", provider: pid, text: errMsg, elapsed: null }));
-                return { provider: pid, text: errMsg };
+            moderatedQuery(text, availableProviders, {
+              models: {},
+              timeout: 120000,
+              onRoute: (plan) => {
+                // Notify which agents are being asked
+                for (const pid of plan.providers) {
+                  socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
+                }
+                if (plan.strategy !== "all") {
+                  socket.send(JSON.stringify({ type: "system", text: `[${plan.intent}] ${plan.reason}` }));
+                }
+              },
+              onResult: (r) => {
+                socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
+              },
+            }).then(({ results, skippedNote }) => {
+              if (skippedNote) {
+                socket.send(JSON.stringify({ type: "system", text: skippedNote }));
               }
-            });
-
-            Promise.all(promises).then((results) => {
+              // Save to thread
               if (threadDir) {
                 appendFileSync(join(threadDir, "messages.ndjson"),
-                  JSON.stringify({ ts: Date.now(), role: "assistant", content: results.map(r => `[${r.provider}]\n${r.text}`).join("\n\n---\n\n"), tools: [], providers: results }) + "\n");
+                  JSON.stringify({ ts: Date.now(), role: "assistant", content: results.map(r => `[${r.provider}]\n${r.text}`).join("\n\n---\n\n"), providers: results }) + "\n");
               }
+              // Save session
+              try {
+                const session = new Session();
+                session.addTurn(text, results.map(r => ({ ...r, model: "auto" })));
+              } catch {}
               socket.send(JSON.stringify({ type: "done" }));
             }).catch(err => {
               socket.send(JSON.stringify({ type: "error", message: err.message }));

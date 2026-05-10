@@ -5,7 +5,7 @@ import { createInterface } from "readline";
 import { t } from "./i18n.js";
 import { PROVIDERS } from "./providers.js";
 
-export const VERSION = "1.2.0";
+export const VERSION = "1.3.0";
 
 // ============================================================
 // BANNER
