@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] — 2026-05-10
+
+### Added
+- **Moderator agent** — analyzes user intent and routes to capable agents
+- **Capabilities matrix** (`src/capabilities.js`) — defines what each agent can/cannot do
+- **Intent detection** — auto-detects search, code review, comparison, reasoning queries
+- **Smart routing** — search queries only go to search-capable agents (kiro, codex)
+- **Skip notifications** — tells you when agents are skipped and why
+- **NDJSON now includes intent/strategy** in `start` event
+
+### Architecture
+- `src/moderator.js` — orchestration brain (intent detection + routing + execution)
+- `src/capabilities.js` — per-agent capability definitions (extensible)
+- Both CLI and Web use the same moderator logic
+
 ## [1.1.0] — 2026-05-10
 
 ### Added

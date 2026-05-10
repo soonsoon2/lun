@@ -5,6 +5,7 @@
  */
 import { PROVIDERS, checkAvailable, getAvailableProviders } from "../src/providers.js";
 import { runProvider, runAll } from "../src/runner.js";
+import { moderatedQuery, detectIntent } from "../src/moderator.js";
 import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, SESSIONS_DIR } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
 import { t } from "../src/i18n.js";
@@ -252,31 +253,30 @@ async function interactiveMode(activeProviders, activeModels, activeTimeout) {
       break;
     }
 
-    // Run all providers
-    const progress = new Progress(activeProviders);
-    progress.start();
-    for (const pid of activeProviders) progress.update(pid, "run");
+    // Run moderated query
+    const { intent, reason, skippedNote, results } = await moderatedQuery(trimmed, activeProviders, {
+      models: activeModels,
+      timeout: activeTimeout,
+      onRoute: (plan) => {
+        if (plan.strategy !== "all") {
+          console.log(`\n  \x1b[90m[${plan.intent}] ${plan.reason}\x1b[0m`);
+        }
+        console.log("");
+        // Show progress
+        for (const pid of plan.providers) {
+          console.log(`  \x1b[33m~ ${(PROVIDERS[pid]?.name || pid).padEnd(14)} ${t("responding")}\x1b[0m`);
+        }
+        console.log("");
+      },
+      onResult: (r) => {
+        const name = PROVIDERS[r.provider]?.name || r.provider;
+        const model = activeModels[r.provider] || "auto";
+        console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
+        console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
+      },
+    });
 
-    const results = await Promise.all(activeProviders.map(async (pid) => {
-      try {
-        const r = await runProvider(pid, trimmed, { model: activeModels[pid], timeout: activeTimeout });
-        progress.update(pid, "done", { elapsed: r.elapsed, model: activeModels[pid] || "auto" });
-        return r;
-      } catch (err) {
-        progress.update(pid, "error");
-        return { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
-      }
-    }));
-
-    progress.finish();
-
-    // Print results
-    for (const r of results) {
-      const name = PROVIDERS[r.provider]?.name || r.provider;
-      const model = activeModels[r.provider] || "auto";
-      console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
-      console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
-    }
+    if (skippedNote) console.log(`  \x1b[90m${skippedNote}\x1b[0m\n`);
 
     // Save turn
     session.addTurn(trimmed, results.map(r => ({ ...r, model: activeModels[r.provider] || "auto" })));
@@ -325,64 +325,56 @@ async function main() {
 
   // One-shot mode
   if (jsonOutput) {
-    // NDJSON streaming — emit results as they arrive
-    console.log(JSON.stringify({ event: "start", providers: activeProviders, models: activeModels, timestamp: new Date().toISOString() }));
+    // NDJSON streaming with moderator routing
+    const { intent, strategy, reason, skippedNote, results } = await moderatedQuery(fullPrompt, activeProviders, {
+      models: activeModels,
+      timeout: activeTimeout,
+      onRoute: (plan) => {
+        console.log(JSON.stringify({ event: "start", intent: plan.intent, strategy: plan.strategy, providers: plan.providers, models: activeModels, timestamp: new Date().toISOString() }));
+      },
+      onChunk: (provider, delta) => {
+        console.log(JSON.stringify({ event: "chunk", provider, delta }));
+      },
+      onResult: (r) => {
+        console.log(JSON.stringify({ event: "result", provider: r.provider, model: activeModels[r.provider] || "auto", text: r.text, elapsed: r.elapsed, error: !!r.error }));
+      },
+    });
 
-    const results = [];
-    await Promise.all(activeProviders.map(async (pid) => {
-      try {
-        const r = await runProvider(pid, fullPrompt, {
-          model: activeModels[pid], timeout: activeTimeout,
-          onChunk: (provider, delta) => {
-            console.log(JSON.stringify({ event: "chunk", provider, delta }));
-          },
-        });
-        const result = { provider: r.provider, model: activeModels[pid] || "auto", text: r.text, elapsed: r.elapsed, error: false };
-        results.push(result);
-        console.log(JSON.stringify({ event: "result", ...result }));
-      } catch (err) {
-        const result = { provider: pid, model: activeModels[pid] || "auto", text: `[Error] ${err.message}`, elapsed: 0, error: true };
-        results.push(result);
-        console.log(JSON.stringify({ event: "result", ...result }));
-      }
-    }));
-
-    console.log(JSON.stringify({ event: "done", total: results.length, errors: results.filter(r => r.error).length }));
+    console.log(JSON.stringify({ event: "done", total: results.length, errors: results.filter(r => r.error).length, skippedNote }));
 
     // Save session
     const session = new Session();
     session.addTurn(fullPrompt, results);
 
   } else {
-    // Human mode — streaming display
+    // Human mode — moderated streaming display
     const list = activeProviders.map(p => { const m = activeModels[p]; return m && m !== "auto" ? `${p}(${m})` : p; }).join(", ");
     console.log(`\n\x1b[90m  Lun — ${t("asking", list)}\x1b[0m\n`);
 
-    // Show all providers as "waiting"
-    const status = Object.fromEntries(activeProviders.map(p => [p, "waiting"]));
-    const completed = [];
-
-    // Print results as they arrive (race pattern)
-    const promises = activeProviders.map(async (pid) => {
-      const name = PROVIDERS[pid]?.name || pid;
-      const model = activeModels[pid] || "auto";
-      try {
-        const r = await runProvider(pid, fullPrompt, { model: activeModels[pid], timeout: activeTimeout });
-        // Print immediately when done
-        console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
-        console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
-        completed.push(r);
-        return r;
-      } catch (err) {
-        console.log(`\x1b[31m  --- ${name} (failed) ---\x1b[0m`);
-        console.log(`  ${err.message}\n`);
-        const r = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
-        completed.push(r);
-        return r;
-      }
+    const { intent, strategy, reason, skippedNote, results } = await moderatedQuery(fullPrompt, activeProviders, {
+      models: activeModels,
+      timeout: activeTimeout,
+      onRoute: (plan) => {
+        if (plan.strategy !== "all") {
+          console.log(`  \x1b[90m[${plan.intent}] ${plan.reason}\x1b[0m\n`);
+        }
+      },
+      onResult: (r) => {
+        const name = PROVIDERS[r.provider]?.name || r.provider;
+        const model = activeModels[r.provider] || "auto";
+        if (r.error) {
+          console.log(`\x1b[31m  --- ${name} (failed) ---\x1b[0m`);
+          console.log(`  ${r.text}\n`);
+        } else {
+          console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
+          console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
+        }
+      },
     });
 
-    const results = await Promise.all(promises);
+    if (skippedNote) {
+      console.log(`  \x1b[90m${skippedNote}\x1b[0m\n`);
+    }
 
     // Summarize
     if (summarize && results.filter(r => !r.error).length > 1) {
