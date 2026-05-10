@@ -24,7 +24,7 @@ export const PROVIDERS = {
         const r = spawnSync("kiro-cli", ["chat", "--list-models", "--format", "json"], { encoding: "utf-8", timeout: 10000 });
         if (r.stdout) {
           const data = JSON.parse(r.stdout);
-          return (data.models || []).map(m => ({ id: m.model_id, label: m.model_id }));
+          return [...(data.models || []).map(m => ({ id: m.model_id, label: m.model_id })), { id: "__custom__", label: "Other (type manually)" }];
         }
       } catch {}
       return [{ id: "auto", label: "auto" }];
@@ -46,6 +46,9 @@ export const PROVIDERS = {
       { id: "sonnet", label: "sonnet (default)" },
       { id: "opus", label: "opus (highest quality)" },
       { id: "haiku", label: "haiku (fast, low cost)" },
+      { id: "sonnet[1m]", label: "sonnet [1M context]" },
+      { id: "opus[1m]", label: "opus [1M context]" },
+      { id: "__custom__", label: "Other (type manually)" },
     ],
   },
 
@@ -67,6 +70,7 @@ export const PROVIDERS = {
       { id: "gpt-4.1", label: "gpt-4.1" },
       { id: "o3", label: "o3 (reasoning)" },
       { id: "claude-sonnet-4.6", label: "claude-sonnet-4.6" },
+      { id: "__custom__", label: "Other (type manually)" },
     ],
   },
 };

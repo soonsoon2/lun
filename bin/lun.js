@@ -89,7 +89,12 @@ async function cmdInit() {
     if (modelList.length > 0) {
       console.log("");
       const sel = await selectFromList(`  ${t("model_select", def.name)}`, modelList.map(m => ({ label: m.label, value: m.id })));
-      models[pid] = sel;
+      if (sel === "__custom__") {
+        const custom = await promptText(`  ${def.name} model name`, def.defaultModel || "auto");
+        models[pid] = custom;
+      } else {
+        models[pid] = sel;
+      }
     }
   }
 
