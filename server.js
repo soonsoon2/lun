@@ -10,8 +10,8 @@ import { PROVIDERS, checkAvailable } from "./src/providers.js";
 import { runProvider, runAll, stripAnsi, cleanOutput } from "./src/runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.KIRO_CHAT_PORT || process.env.PORT || 3456);
-const HOST = process.env.KIRO_CHAT_HOST || process.env.HOST || "127.0.0.1";
+const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
+const HOST = process.env.LUN_HOST || process.env.HOST || "127.0.0.1";
 const DATA_DIR = join(__dirname, "_data");
 const THREADS_DIR = join(DATA_DIR, "threads");
 const KIRO_SESSIONS_DIR = join(process.env.HOME, ".kiro/sessions/cli");

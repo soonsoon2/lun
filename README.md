@@ -190,6 +190,15 @@ node server.js
 # → http://localhost:3456
 ```
 
+Custom port:
+```bash
+# Environment variable
+PORT=8080 node server.js
+
+# Or use LUN_PORT
+LUN_PORT=9000 node server.js
+```
+
 Features: real-time streaming, session history sidebar, per-agent model settings.
 
 ---
@@ -206,6 +215,14 @@ Stored at `~/.lun/config.json`:
   "timeout": 120
 }
 ```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LUN_PORT` | `3456` | Web UI port |
+| `LUN_HOST` | `127.0.0.1` | Web UI bind address |
+| `PORT` | `3456` | Alternative port variable |
 
 ---
 
