@@ -144,6 +144,7 @@ Modes:
   lun                        Interactive (REPL)
   lun "prompt"               One-shot
   cat file | lun "review"    Pipe context
+  lun serve                  Start web UI (localhost:3456)
 
 Options:
   -P, --providers <list>     Agents to use (kiro,claude,copilot)
@@ -186,20 +187,16 @@ lun --sessions
 Lun also has a local web interface with a group-chat style UI:
 
 ```bash
-node server.js
+lun serve
 # → http://localhost:3456
 ```
 
 Custom port:
 ```bash
-# Environment variable
-PORT=8080 node server.js
-
-# Or use LUN_PORT
-LUN_PORT=9000 node server.js
+LUN_PORT=8080 lun serve
 ```
 
-Features: real-time streaming, session history sidebar, per-agent model settings.
+Features: real-time streaming, session history sidebar, per-agent model settings, smart routing with system messages.
 
 ---
 

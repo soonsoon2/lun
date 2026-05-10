@@ -12,7 +12,11 @@ import { t } from "../src/i18n.js";
 import { printBanner, selectFromList, promptText, Progress, VERSION } from "../src/ui.js";
 import { createInterface } from "readline";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // ============================================================
 // ARGS
@@ -178,7 +182,7 @@ function printInstallHelp() {
 // ============================================================
 async function cmdServe() {
   const port = process.env.LUN_PORT || process.env.PORT || 3456;
-  const serverPath = new URL("../server.js", import.meta.url).pathname;
+  const serverPath = join(__dirname, "..", "server.js");
   const { spawn: spawnChild } = await import("child_process");
 
   console.log(`\n  \x1b[90mStarting Lun web UI on port ${port}...\x1b[0m\n`);
@@ -193,7 +197,6 @@ async function cmdServe() {
     process.exit(1);
   });
 
-  // Keep process alive
   await new Promise(() => {});
 }
 
@@ -207,7 +210,7 @@ async function cmdSetupRules() {
   console.log(`  know how to use lun for multi-agent opinions.\n`);
 
   const cwd = process.cwd();
-  const rulesDir = new URL("../rules/", import.meta.url).pathname;
+  const rulesDir = join(__dirname, "..", "rules");
 
   const targets = [
     { id: "claude", file: "claude.md", dest: "CLAUDE.md", append: true, desc: "Claude Code (CLAUDE.md)" },
