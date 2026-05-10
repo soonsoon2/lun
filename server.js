@@ -534,4 +534,13 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 });
 
 await app.listen({ port: PORT, host: HOST });
-console.log(`\n  🚀 kiro-chat running at http://${HOST}:${PORT}\n`);
+console.log(`
+\x1b[36m  ╦   ╦ ╦ ╔╗╔
+  ║   ║ ║ ║║║
+  ╩═╝ ╚═╝ ╝╚╝\x1b[0m
+
+  \x1b[1mLun\x1b[0m web UI running
+  \x1b[90mLocal:\x1b[0m   http://${HOST}:${PORT}
+  \x1b[90mDocs:\x1b[0m    lun --help
+  \x1b[90mCtrl+C\x1b[0m   to stop
+`);
