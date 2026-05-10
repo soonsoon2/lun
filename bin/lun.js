@@ -30,6 +30,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === "--init") { await cmdInit(); process.exit(0); }
   if (a === "--config") { cmdConfig(); process.exit(0); }
   if (a === "--setup-rules") { await cmdSetupRules(); process.exit(0); }
+  if (a === "serve") { await cmdServe(); process.exit(0); }
   if (a === "--providers" || a === "-P") { cliProviders = args[++i]?.split(",").map(s => s.trim()).filter(Boolean); }
   else if (a === "--models" || a === "-M") {
     for (const pair of (args[++i] || "").split(",")) { const [p, m] = pair.split(":"); if (p && m) cliModels[p.trim()] = m.trim(); }
@@ -155,6 +156,7 @@ function cmdHelp() {
     lun --init                 First-time configuration
     lun --config               View current config
     lun --setup-rules          Install lun rules into current project
+    lun serve                  Start web UI (default: localhost:3456)
 
   \x1b[1mExamples:\x1b[0m
     lun "REST vs GraphQL?"
@@ -169,6 +171,30 @@ function printInstallHelp() {
   console.log(`    kiro:    https://kiro.dev/docs/cli`);
   console.log(`    claude:  npm i -g @anthropic-ai/claude-code`);
   console.log(`    copilot: gh extension install github/gh-copilot`);
+}
+
+// ============================================================
+// SERVE — start web UI
+// ============================================================
+async function cmdServe() {
+  const port = process.env.LUN_PORT || process.env.PORT || 3456;
+  const serverPath = new URL("../server.js", import.meta.url).pathname;
+  const { spawn: spawnChild } = await import("child_process");
+
+  console.log(`\n  \x1b[90mStarting Lun web UI on port ${port}...\x1b[0m\n`);
+
+  const child = spawnChild("node", [serverPath], {
+    stdio: "inherit",
+    env: { ...process.env, LUN_PORT: String(port) },
+  });
+
+  child.on("error", (err) => {
+    console.error(`  \x1b[31mFailed to start server:\x1b[0m ${err.message}`);
+    process.exit(1);
+  });
+
+  // Keep process alive
+  await new Promise(() => {});
 }
 
 // ============================================================
