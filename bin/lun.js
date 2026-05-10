@@ -6,7 +6,7 @@
 import { PROVIDERS, checkAvailable, getAvailableProviders } from "../src/providers.js";
 import { runProvider, runAll } from "../src/runner.js";
 import { moderatedQuery, detectIntent } from "../src/moderator.js";
-import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, SESSIONS_DIR } from "../src/config.js";
+import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
 import { t } from "../src/i18n.js";
 import { printBanner, selectFromList, promptText, Progress, VERSION } from "../src/ui.js";
@@ -35,6 +35,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === "--config") { cmdConfig(); process.exit(0); }
   if (a === "--setup-rules") { await cmdSetupRules(); process.exit(0); }
   if (a === "serve") { await cmdServe(); process.exit(0); }
+  if (a === "--move-sessions") { await cmdMoveSessions(); process.exit(0); }
   if (a === "--providers" || a === "-P") { cliProviders = args[++i]?.split(",").map(s => s.trim()).filter(Boolean); }
   else if (a === "--models" || a === "-M") {
     for (const pair of (args[++i] || "").split(",")) { const [p, m] = pair.split(":"); if (p && m) cliModels[p.trim()] = m.trim(); }
@@ -117,7 +118,7 @@ function cmdConfig() {
   console.log(`  Models:`);
   for (const [pid, model] of Object.entries(config.models || {})) console.log(`    ${pid}: ${model}`);
   console.log(`  Timeout:   ${config.timeout}s`);
-  console.log(`  Sessions:  ${SESSIONS_DIR}\n`);
+  console.log(`  Sessions:  ${getSessionsDir()}\n`);
 }
 
 function cmdList() {
@@ -140,7 +141,7 @@ function cmdSessions() {
     const date = s.date?.slice(0, 16).replace("T", " ") || "?";
     console.log(`  \x1b[90m${date}\x1b[0m  [${s.turns} turns]  ${s.firstPrompt}...`);
   }
-  console.log(`\n  \x1b[90mPath: ${SESSIONS_DIR}\x1b[0m\n`);
+  console.log(`\n  \x1b[90mPath: ${getSessionsDir()}\x1b[0m\n`);
 }
 
 function cmdHelp() {
@@ -165,6 +166,7 @@ function cmdHelp() {
     lun --init                 First-time configuration
     lun --config               View current config
     lun --setup-rules          Install lun rules into current project
+    lun --move-sessions        Change sessions storage path
     lun serve                  Start web UI (default: localhost:3456)
 
   \x1b[1mExamples:\x1b[0m
@@ -180,6 +182,41 @@ function printInstallHelp() {
   console.log(`    kiro:    https://kiro.dev/docs/cli`);
   console.log(`    claude:  npm i -g @anthropic-ai/claude-code`);
   console.log(`    copilot: gh extension install github/gh-copilot`);
+}
+
+// ============================================================
+// MOVE SESSIONS — change storage path
+// ============================================================
+async function cmdMoveSessions() {
+  const config = loadConfig() || defaultConfig();
+  const currentPath = getSessionsDir();
+
+  console.log(`\n  \x1b[1mMove sessions storage\x1b[0m\n`);
+  console.log(`  Current path: ${currentPath}\n`);
+
+  const newPath = await promptText("  New path", "");
+  if (!newPath) { console.log("  \x1b[90mCancelled.\x1b[0m\n"); return; }
+
+  // Expand ~
+  const resolved = newPath.startsWith("~/") ? join(process.env.HOME, newPath.slice(2)) : newPath;
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise(resolve => {
+    rl.question(`  Migrate existing sessions to new path? (y/n) `, resolve);
+  });
+  rl.close();
+
+  if (answer.trim().toLowerCase() === "y") {
+    const count = migrateSessions(currentPath, resolved);
+    console.log(`  \x1b[32mv\x1b[0m Migrated ${count} files to ${resolved}`);
+  } else {
+    mkdirSync(resolved, { recursive: true });
+    console.log(`  \x1b[90mStarting fresh at ${resolved}\x1b[0m`);
+  }
+
+  config.sessionsPath = resolved;
+  saveConfig(config);
+  console.log(`  \x1b[32mv\x1b[0m Config updated. Sessions now at: ${resolved}\n`);
 }
 
 // ============================================================
