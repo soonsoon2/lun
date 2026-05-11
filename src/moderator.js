@@ -169,41 +169,46 @@ export async function moderatedQuery(prompt, availableProviders, options = {}) {
 // MODERATOR SYNTHESIS — the moderator agent summarizes all results
 // ============================================================
 
-const SYNTHESIS_PROMPT = `You are the moderator of a multi-agent discussion. Multiple AI agents were asked the same question and gave their answers below.
+const PANELIST_SYSTEM = `You are a panelist in a multi-agent discussion. Give your honest, specific opinion on the question. Be concise (3-5 key points max). If you disagree with a common approach, say so clearly and explain why. End with your concrete recommendation.`;
 
-Your job:
-1. Summarize the key points from each agent
-2. Identify where they agree (consensus)
-3. Identify where they disagree (conflicts)
-4. Give your own opinion as well
-5. Provide a clear, actionable final recommendation
+const SYNTHESIS_PROMPT = `You are the moderator of a multi-agent panel discussion. You just heard from multiple AI agents on the same question.
 
-Be concise and practical. Use bullet points. Write in the same language as the original question.
+Your job as moderator:
+1. Briefly summarize each panelist's position (1 sentence each)
+2. Identify CONSENSUS — what do they all agree on?
+3. Identify CONFLICTS — where do they disagree? Why?
+4. Give YOUR OWN opinion as moderator
+5. State a clear, actionable recommendation
+
+Be direct and practical. Use the same language as the original question.
+
+## Question Asked
+{QUESTION}
+
+## Panelist Responses
+{RESPONSES}
+
+## Your Moderator Summary`;
+
+const FOLLOWUP_PROMPT = `You are moderating a panel discussion. The panelists gave their initial answers but there are unresolved disagreements or areas that need deeper exploration.
+
+Your job: Generate ONE specific follow-up question that will:
+- Challenge the weakest argument
+- Or explore the most important unresolved trade-off
+- Or ask for concrete evidence/examples
+
+The question should force the panelists to go deeper, not repeat themselves.
 
 ## Original Question
 {QUESTION}
 
-## Agent Responses
+## Panelist Responses
 {RESPONSES}
 
-## Your Task
-Synthesize the above into a clear recommendation.`;
-
-const FOLLOWUP_PROMPT = `You are moderating a multi-agent discussion. Based on the previous round of answers, there are unresolved disagreements or areas that need deeper exploration.
-
-Generate ONE focused follow-up question that would help resolve the key disagreement or explore the most important unexplored angle. The question should be specific and actionable.
-
-## Original Question
-{QUESTION}
-
-## Previous Responses
-{RESPONSES}
-
-## Synthesis So Far
+## Your Previous Synthesis
 {SYNTHESIS}
 
-## Your Task
-Write ONE follow-up question (just the question, nothing else) that would help reach better consensus.`;
+## Generate exactly ONE follow-up question (nothing else):`;
 
 /**
  * Run moderator synthesis — the moderator agent summarizes all results.
@@ -299,8 +304,12 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
     const results = [];
     for (const pid of panelists) {
       if (onPanelistStart) onPanelistStart(pid);
+      // Wrap prompt with panelist system instruction
+      const panelistPrompt = turn === 1
+        ? `${PANELIST_SYSTEM}\n\n## Question\n${currentQuestion}`
+        : `${PANELIST_SYSTEM}\n\nThis is a follow-up question in an ongoing discussion. The moderator wants you to go deeper.\n\n## Follow-up Question\n${currentQuestion}`;
       try {
-        const r = await runProvider(pid, currentQuestion, {
+        const r = await runProvider(pid, panelistPrompt, {
           model: models[pid],
           timeout,
         });
