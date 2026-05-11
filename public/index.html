@@ -135,6 +135,10 @@
     </div>
     <div class="input-area">
       <div class="input-row">
+        <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dim);cursor:pointer;flex-shrink:0">
+          <input type="checkbox" id="discToggle" style="width:13px;height:13px;accent-color:var(--accent)">
+          Discuss
+        </label>
         <textarea id="inp" placeholder="Ask something..." rows="1"></textarea>
         <button id="snd">↑</button>
       </div>
@@ -162,6 +166,11 @@
     }
     function addTyping(pid){hide();if(document.getElementById(`ty-${pid}`))return;const r=el("div","row a");r.id=`ty-${pid}`;r.innerHTML=`<div class="av ${pid}">${AG[pid]?.a||"?"}</div><div class="bw"><div class="bm"><span class="n ${pid}">${AG[pid]?.l||pid}</span></div><div class="typing"><span></span><span></span><span></span></div></div>`;chat.appendChild(r);scroll()}
     function addSys(t){hide();const d=el("div","sys-msg");d.textContent=t;chat.appendChild(d);scroll()}
+    function addSynthesis(text,elapsed,mod){
+      hide();const r=el("div","row a");
+      r.innerHTML=`<div class="av" style="background:rgba(74,222,128,0.1);color:var(--copilot);font-size:8px">Mod</div><div class="bw"><div class="bm"><span class="n" style="color:var(--copilot)">SYNTHESIS</span><span>${elapsed||""}s</span></div><div class="bub" style="border-color:rgba(74,222,128,0.2)">${md(text||"")}</div></div>`;
+      chat.appendChild(r);scroll();
+    }
 
     // === Sessions ===
     async function loadSessions(){
@@ -226,6 +235,9 @@
           case"provider-thinking":addTyping(msg.provider);break;
           case"provider-response":addAi(msg.provider,msg.text,msg.elapsed);break;
           case"system":addSys(msg.text);break;
+          case"synthesis":addSynthesis(msg.text,msg.elapsed,msg.moderator);break;
+          case"discuss-turn":addSys(`━━━ Round ${msg.turn} ━━━`);if(msg.turn>1)addSys(`Follow-up: ${msg.question}`);break;
+          case"followup":addSys(`→ ${msg.question}`);break;
           case"done":waiting=false;dot.className="dot on";inp.disabled=false;snd.disabled=false;inp.focus();loadSessions();break;
           case"error":waiting=false;dot.className="dot on";inp.disabled=false;snd.disabled=false;break;
         }
@@ -236,7 +248,8 @@
     // === Input ===
     function send(){
       if(composing||waiting)return;const t=inp.value.trim();if(!t)return;
-      addUser(t);ws.send(JSON.stringify({type:"message",text:t}));
+      const disc=document.getElementById("discToggle").checked;
+      addUser(t);ws.send(JSON.stringify({type:"message",text:t,discuss:disc}));
       inp.value="";inp.style.height="38px";waiting=true;inp.disabled=true;snd.disabled=true;dot.className="dot load";
     }
     snd.addEventListener("click",send);

@@ -8,8 +8,9 @@ import { dirname, join } from "path";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, appendFileSync, readdirSync, statSync } from "fs";
 import { PROVIDERS, checkAvailable } from "./src/providers.js";
 import { runProvider, runAll, stripAnsi, cleanOutput } from "./src/runner.js";
-import { moderatedQuery, detectIntent } from "./src/moderator.js";
+import { moderatedQuery, detectIntent, discuss, synthesize } from "./src/moderator.js";
 import { Session } from "./src/session.js";
+import { loadConfig, defaultConfig, getSessionsDir } from "./src/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
@@ -392,6 +393,54 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             socket.send(JSON.stringify({ type: "thinking" }));
             const availableProviders = Object.keys(PROVIDERS).filter(checkAvailable);
 
+            // Discuss mode
+            if (msg.discuss) {
+              const config = loadConfig() || defaultConfig();
+              const moderatorId = config.moderator || "claude";
+
+              discuss(text, availableProviders, {
+                moderator: moderatorId,
+                moderatorModel: config.models?.[moderatorId],
+                models: config.models || {},
+                maxTurns: msg.maxTurns || config.autoDiscuss?.maxTurns || 3,
+                maxTime: msg.maxTime || config.autoDiscuss?.maxTime || 120,
+                timeout: 120000,
+                onTurnStart: (turn, question) => {
+                  socket.send(JSON.stringify({ type: "discuss-turn", turn, question }));
+                },
+                onResult: (r) => {
+                  socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
+                },
+                onSynthesis: (text, elapsed) => {
+                  socket.send(JSON.stringify({ type: "synthesis", text, elapsed, moderator: moderatorId }));
+                },
+                onFollowup: (question) => {
+                  socket.send(JSON.stringify({ type: "followup", question }));
+                },
+                onRoute: (plan) => {
+                  for (const pid of plan.providers) {
+                    socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
+                  }
+                  if (plan.strategy !== "all") {
+                    socket.send(JSON.stringify({ type: "system", text: `[${plan.intent}] ${plan.reason}` }));
+                  }
+                },
+              }).then((result) => {
+                try {
+                  const session = new Session();
+                  for (const t of result.turns) {
+                    session.addTurn(t.question, t.results.map(r => ({ ...r, model: "auto" })));
+                  }
+                } catch {}
+                socket.send(JSON.stringify({ type: "done" }));
+              }).catch(err => {
+                socket.send(JSON.stringify({ type: "error", message: err.message }));
+                socket.send(JSON.stringify({ type: "done" }));
+              });
+              break;
+            }
+
+            // Standard moderated query
             moderatedQuery(text, availableProviders, {
               models: {},
               timeout: 120000,
