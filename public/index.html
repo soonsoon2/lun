@@ -96,6 +96,14 @@
     #inp::placeholder{color:var(--muted)}
     #snd{width:36px;height:36px;border-radius:9px;border:none;background:var(--accent);color:#000;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
     #snd:disabled{opacity:.2;cursor:not-allowed}
+    .agent-chip{padding:4px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:inherit;transition:all .15s}
+    .agent-chip.on{background:var(--bg-el);color:var(--text);border-color:var(--dim)}
+    .agent-chip.on.kiro{border-color:var(--kiro);color:var(--kiro)}
+    .agent-chip.on.claude{border-color:var(--claude);color:var(--claude)}
+    .agent-chip.on.copilot{border-color:var(--copilot);color:var(--copilot)}
+    .agent-chip.on.gemini{border-color:#60a5fa;color:#60a5fa}
+    .agent-chip.on.codex{border-color:#f472b6;color:#f472b6}
+    .agent-chip.on.cline{border-color:#fbbf24;color:#fbbf24}
 
     .welcome{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--muted)}
     .welcome .big{font-size:32px;font-weight:900;color:var(--text);letter-spacing:-0.04em}
@@ -140,6 +148,7 @@
       </div>
     </div>
     <div class="input-area">
+      <div id="agentChips" style="display:flex;gap:5px;max-width:660px;margin:0 auto 8px;flex-wrap:wrap"></div>
       <div class="input-row">
         <div class="mode-switch">
           <button class="mode-btn active" data-mode="normal" id="modeNormal">Ask</button>
@@ -154,7 +163,8 @@
   <script>
     const chat=document.getElementById("chat"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),dot=document.getElementById("dot"),hInfo=document.getElementById("hInfo"),sessList=document.getElementById("sessList"),storagePath=document.getElementById("storagePath");
     let ws=null,waiting=false,composing=false,currentMode="normal";
-    const AG={kiro:{l:"Kiro",a:"K"},claude:{l:"Claude",a:"C"},copilot:{l:"Co",a:"Co"}};
+    const AG={kiro:{l:"Kiro",a:"K"},claude:{l:"Claude",a:"C"},copilot:{l:"Co",a:"Co"},gemini:{l:"Gemini",a:"G"},codex:{l:"Codex",a:"Cx"},cline:{l:"Cline",a:"Cl"}};
+    let activeAgents = new Set();
 
     // Mode switch
     document.querySelectorAll(".mode-btn").forEach(btn=>{
@@ -165,6 +175,29 @@
         inp.placeholder=currentMode==="discuss"?"Start a discussion...":"Ask something...";
       });
     });
+
+    // Agent chips
+    async function loadAgentChips(){
+      try{
+        const r=await fetch("/api/providers");const d=await r.json();
+        const chips=document.getElementById("agentChips");
+        chips.innerHTML="";
+        for(const p of (d.providers||[])){
+          if(!p.available)continue;
+          const btn=document.createElement("button");
+          btn.className=`agent-chip on ${p.id}`;
+          btn.textContent=p.name;
+          btn.dataset.id=p.id;
+          activeAgents.add(p.id);
+          btn.addEventListener("click",()=>{
+            btn.classList.toggle("on");
+            if(btn.classList.contains("on"))activeAgents.add(p.id);
+            else activeAgents.delete(p.id);
+          });
+          chips.appendChild(btn);
+        }
+      }catch{}
+    }
 
     // === Render ===
     function hide(){wel.style.display="none"}
@@ -285,7 +318,8 @@
     function send(){
       if(composing||waiting)return;const t=inp.value.trim();if(!t)return;
       const disc=currentMode==="discuss";
-      addUser(t);ws.send(JSON.stringify({type:"message",text:t,discuss:disc}));
+      const agents=[...activeAgents];
+      addUser(t);ws.send(JSON.stringify({type:"message",text:t,discuss:disc,agents}));
       inp.value="";inp.style.height="38px";waiting=true;inp.disabled=true;snd.disabled=true;dot.className="dot load";
     }
     snd.addEventListener("click",send);
@@ -296,7 +330,7 @@
     document.getElementById("newBtn").addEventListener("click",()=>{chat.innerHTML="";wel.style.display="flex";chat.appendChild(wel);hInfo.textContent="Ready";if(ws&&ws.readyState===1)ws.close();connect()});
 
     // Init
-    connect();loadSessions();loadModels();
+    connect();loadSessions();loadModels();loadAgentChips();
   </script>
 </body>
 </html>

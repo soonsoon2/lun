@@ -404,7 +404,8 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
           // "all" mode: moderated multi-agent query
           if (provider === "all") {
-            const availableProviders = Object.keys(PROVIDERS).filter(checkAvailable);
+            const requestedAgents = msg.agents && msg.agents.length > 0 ? msg.agents : null;
+            const availableProviders = Object.keys(PROVIDERS).filter(id => checkAvailable(id) && (!requestedAgents || requestedAgents.includes(id)));
 
             // Discuss mode
             if (msg.discuss) {

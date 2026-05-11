@@ -288,8 +288,8 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
   } = options;
 
   const startTime = Date.now();
-  // Panelists = everyone except moderator
-  const panelists = availableProviders.filter(p => p !== moderator);
+  // Moderator participates as panelist too
+  const panelists = availableProviders;
 
   const turns = [];
   let currentQuestion = originalPrompt;
