@@ -114,7 +114,9 @@ export const PROVIDERS = {
     },
     env: { TERM: "dumb", NO_COLOR: "1" },
     getModels: () => [
-      { id: "o3", label: "o3 (default reasoning)" },
+      { id: "gpt-5.5", label: "GPT-5.5 (latest)" },
+      { id: "gpt-5.5-pro", label: "GPT-5.5 Pro" },
+      { id: "o3", label: "o3 (reasoning)" },
       { id: "o4-mini", label: "o4-mini (fast)" },
       { id: "gpt-5.3-codex", label: "GPT-5.3-Codex" },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark (real-time)" },
