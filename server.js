@@ -404,7 +404,6 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
           // "all" mode: moderated multi-agent query
           if (provider === "all") {
-            socket.send(JSON.stringify({ type: "thinking" }));
             const availableProviders = Object.keys(PROVIDERS).filter(checkAvailable);
 
             // Discuss mode
@@ -414,7 +413,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               const modName = PROVIDERS[moderatorId]?.name || moderatorId;
 
               // Moderator introduces the discussion
-              socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `I'll moderate this discussion. Let me ask the panel for their perspectives, then I'll synthesize the key points.\n\nQuestion for the panel: "${text}"`, elapsed: 0 }));
+              socket.send(JSON.stringify({ type: "moderator-msg", text: `I'll moderate this discussion. Let me ask the panel for their perspectives.\n\nQuestion: "${text}"` }));
 
               discuss(text, availableProviders, {
                 moderator: moderatorId,
@@ -425,7 +424,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 timeout: 120000,
                 onTurnStart: (turn, question) => {
                   if (turn > 1) {
-                    socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `There are unresolved points. Let me dig deeper:\n\n"${question}"`, elapsed: 0 }));
+                    socket.send(JSON.stringify({ type: "moderator-msg", text: `Let me follow up on the unresolved points:\n\n"${question}"` }));
                   }
                 },
                 onPanelistStart: (pid) => {
@@ -435,17 +434,11 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                   socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
                 },
                 onSynthesis: (text, elapsed) => {
-                  socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `**Synthesis:**\n\n${text}`, elapsed }));
+                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Synthesis:**\n\n${text}`, elapsed }));
                 },
                 onFollowup: () => {},
-                onRoute: (plan) => {
-                  if (plan.strategy !== "all") {
-                    socket.send(JSON.stringify({ type: "system", text: `[${plan.intent}] ${plan.reason}` }));
-                  }
-                },
               }).then((result) => {
-                // Final wrap-up from moderator
-                socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s total.`, elapsed: 0 }));
+                socket.send(JSON.stringify({ type: "moderator-msg", text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s total.` }));
                 try {
                   const session = new Session();
                   for (const t of result.turns) {
@@ -461,6 +454,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             }
 
             // Standard moderated query
+            socket.send(JSON.stringify({ type: "thinking" }));
             moderatedQuery(text, availableProviders, {
               models: {},
               timeout: 120000,
