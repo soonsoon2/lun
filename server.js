@@ -243,7 +243,21 @@ app.get("/api/provider-models", async () => {
       result[id] = def.getModels ? def.getModels() : [];
     }
   }
-  return { models: result };
+  const config = loadConfig() || defaultConfig();
+  return { models: result, moderator: config.moderator || "claude" };
+});
+
+// ============================================================
+// API: POST /api/moderator
+// ============================================================
+app.post("/api/moderator", async (req) => {
+  const { moderator } = req.body || {};
+  if (!moderator) return { error: "missing moderator" };
+  const config = loadConfig() || defaultConfig();
+  config.moderator = moderator;
+  const { saveConfig: save } = await import("./src/config.js");
+  save(config);
+  return { ok: true, moderator };
 });
 
 // ============================================================
@@ -413,9 +427,9 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                   if (turn > 1) {
                     socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `There are unresolved points. Let me dig deeper:\n\n"${question}"`, elapsed: 0 }));
                   }
-                  for (const pid of availableProviders) {
-                    socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
-                  }
+                },
+                onPanelistStart: (pid) => {
+                  socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
                 },
                 onResult: (r) => {
                   socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));

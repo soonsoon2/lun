@@ -244,14 +244,13 @@ export async function generateFollowup(moderatorId, originalPrompt, results, syn
 }
 
 /**
- * Run a full autonomous discussion.
+ * Run a full autonomous discussion with debate-style pacing.
  *
- * Flow:
- * 1. Ask all agents the original question
- * 2. Moderator synthesizes
- * 3. If maxTurns > 1, moderator generates follow-up question
- * 4. Ask agents the follow-up
- * 5. Repeat until maxTurns or maxTime reached
+ * Flow per round:
+ * 1. Moderator frames the question (onModeratorSpeak)
+ * 2. Each panelist answers ONE BY ONE sequentially (onResult)
+ * 3. Moderator synthesizes (onSynthesis)
+ * 4. Moderator generates follow-up → next round
  *
  * Options:
  *   - moderator: provider ID for the moderator
@@ -261,9 +260,11 @@ export async function generateFollowup(moderatorId, originalPrompt, results, syn
  *   - maxTime: max total time in seconds (default: 120)
  *   - timeout: per-provider timeout in ms
  *   - onTurnStart: (turnNumber, question) => void
- *   - onResult: (result) => void
+ *   - onPanelistStart: (provider) => void — about to ask this panelist
+ *   - onResult: (result) => void — panelist answered
  *   - onSynthesis: (text, elapsed) => void
  *   - onFollowup: (question) => void
+ *   - onRoute: (plan) => void
  */
 export async function discuss(originalPrompt, availableProviders, options = {}) {
   const {
@@ -274,6 +275,7 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
     maxTime = 120,
     timeout = 120000,
     onTurnStart,
+    onPanelistStart,
     onResult,
     onSynthesis,
     onFollowup,
@@ -281,29 +283,37 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
   } = options;
 
   const startTime = Date.now();
+  // Panelists = everyone except moderator
   const panelists = availableProviders.filter(p => p !== moderator);
-  // Include moderator in panelists too (it gives its own opinion)
-  const allPanelists = availableProviders;
 
   const turns = [];
   let currentQuestion = originalPrompt;
 
   for (let turn = 1; turn <= maxTurns; turn++) {
-    // Check time limit
     const elapsed = (Date.now() - startTime) / 1000;
     if (elapsed >= maxTime && turn > 1) break;
 
     if (onTurnStart) onTurnStart(turn, currentQuestion);
 
-    // 1. Ask all agents
-    const { results, intent, reason, skippedNote } = await moderatedQuery(currentQuestion, allPanelists, {
-      models,
-      timeout,
-      onResult,
-      onRoute,
-    });
+    // 1. Ask panelists ONE BY ONE (sequential for debate feel)
+    const results = [];
+    for (const pid of panelists) {
+      if (onPanelistStart) onPanelistStart(pid);
+      try {
+        const r = await runProvider(pid, currentQuestion, {
+          model: models[pid],
+          timeout,
+        });
+        results.push(r);
+        if (onResult) onResult(r);
+      } catch (err) {
+        const r = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
+        results.push(r);
+        if (onResult) onResult(r);
+      }
+    }
 
-    // 2. Moderator synthesizes
+    // 2. Moderator synthesizes all panelist answers
     const synthResult = await synthesize(moderator, currentQuestion, results, {
       model: moderatorModel || models[moderator],
       timeout,
@@ -332,7 +342,7 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
       if (onFollowup) onFollowup(followup);
       currentQuestion = followup;
     } catch {
-      break; // Can't generate follow-up, stop
+      break;
     }
   }
 

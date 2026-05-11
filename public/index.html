@@ -117,6 +117,8 @@
       <div class="s-row"><label>Kiro</label><select id="mKiro"></select></div>
       <div class="s-row"><label>Claude</label><select id="mClaude"></select></div>
       <div class="s-row"><label>Copilot</label><select id="mCopilot"></select></div>
+      <div class="sec-title" style="margin-top:8px">Moderator</div>
+      <div class="s-row"><label>Agent</label><select id="mModerator"></select></div>
       <div class="sec-title" style="margin-top:8px">Storage</div>
       <div class="path-row" id="storagePath">~/.lun/sessions/</div>
     </div>
@@ -224,7 +226,10 @@
     async function loadModels(){
       try{
         const r=await fetch("/api/provider-models");const d=await r.json();
+        const modSelect=document.getElementById("mModerator");
+        modSelect.innerHTML="";
         for(const[pid,models]of Object.entries(d.models||{})){
+          // Model dropdowns
           const sel=document.getElementById(`m${pid.charAt(0).toUpperCase()+pid.slice(1)}`);
           if(!sel)continue;
           sel.innerHTML="";
@@ -232,7 +237,22 @@
             if(m.id==="__custom__")continue;
             const opt=document.createElement("option");opt.value=m.id;opt.textContent=m.label;sel.appendChild(opt);
           }
+          // Moderator dropdown
+          const mopt=document.createElement("option");
+          mopt.value=pid;
+          mopt.textContent=pid.charAt(0).toUpperCase()+pid.slice(1);
+          modSelect.appendChild(mopt);
         }
+        // Set current moderator + mark recommended
+        if(d.moderator)modSelect.value=d.moderator;
+        // Add (recommended) label to fastest — for now mark claude
+        for(const opt of modSelect.options){
+          if(opt.value==="claude")opt.textContent+=" (fast)";
+        }
+        // On change, save
+        modSelect.addEventListener("change",async()=>{
+          await fetch("/api/moderator",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({moderator:modSelect.value})});
+        });
       }catch{}
     }
 
