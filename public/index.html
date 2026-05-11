@@ -86,6 +86,10 @@
 
     .input-area{padding:12px 18px 16px;border-top:1px solid var(--border);flex-shrink:0}
     .input-row{display:flex;gap:8px;align-items:flex-end;max-width:660px;margin:0 auto}
+    .mode-switch{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;align-self:flex-end}
+    .mode-btn{padding:8px 12px;font-size:10px;font-weight:600;font-family:inherit;background:transparent;border:none;color:var(--muted);cursor:pointer;transition:all .15s}
+    .mode-btn.active{background:var(--bg-el);color:var(--text)}
+    .mode-btn:hover:not(.active){color:var(--dim)}
     #inp{flex:1;background:var(--bg-bub-ai);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:12px;font-family:inherit;resize:none;min-height:38px;max-height:160px;line-height:1.5;outline:none}
     #inp:focus{border-color:var(--accent)}
     #inp:disabled{opacity:.3}
@@ -135,10 +139,10 @@
     </div>
     <div class="input-area">
       <div class="input-row">
-        <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dim);cursor:pointer;flex-shrink:0">
-          <input type="checkbox" id="discToggle" style="width:13px;height:13px;accent-color:var(--accent)">
-          Discuss
-        </label>
+        <div class="mode-switch">
+          <button class="mode-btn active" data-mode="normal" id="modeNormal">Ask</button>
+          <button class="mode-btn" data-mode="discuss" id="modeDiscuss">Discuss</button>
+        </div>
         <textarea id="inp" placeholder="Ask something..." rows="1"></textarea>
         <button id="snd">↑</button>
       </div>
@@ -147,8 +151,18 @@
 
   <script>
     const chat=document.getElementById("chat"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),dot=document.getElementById("dot"),hInfo=document.getElementById("hInfo"),sessList=document.getElementById("sessList"),storagePath=document.getElementById("storagePath");
-    let ws=null,waiting=false,composing=false;
+    let ws=null,waiting=false,composing=false,currentMode="normal";
     const AG={kiro:{l:"Kiro",a:"K"},claude:{l:"Claude",a:"C"},copilot:{l:"Co",a:"Co"}};
+
+    // Mode switch
+    document.querySelectorAll(".mode-btn").forEach(btn=>{
+      btn.addEventListener("click",()=>{
+        document.querySelectorAll(".mode-btn").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        currentMode=btn.dataset.mode;
+        inp.placeholder=currentMode==="discuss"?"Start a discussion...":"Ask something...";
+      });
+    });
 
     // === Render ===
     function hide(){wel.style.display="none"}
@@ -248,7 +262,7 @@
     // === Input ===
     function send(){
       if(composing||waiting)return;const t=inp.value.trim();if(!t)return;
-      const disc=document.getElementById("discToggle").checked;
+      const disc=currentMode==="discuss";
       addUser(t);ws.send(JSON.stringify({type:"message",text:t,discuss:disc}));
       inp.value="";inp.style.height="38px";waiting=true;inp.disabled=true;snd.disabled=true;dot.className="dot load";
     }
