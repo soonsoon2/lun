@@ -5,7 +5,7 @@
  */
 import { PROVIDERS, checkAvailable, getAvailableProviders } from "../src/providers.js";
 import { runProvider, runAll } from "../src/runner.js";
-import { moderatedQuery, detectIntent } from "../src/moderator.js";
+import { moderatedQuery, detectIntent, discuss, synthesize } from "../src/moderator.js";
 import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
 import { t } from "../src/i18n.js";
@@ -25,6 +25,9 @@ const args = process.argv.slice(2);
 let cliProviders = null;
 let cliModels = {};
 let summarize = false;
+let discussMode = false;
+let maxTurns = 3;
+let maxTime = 120;
 let jsonOutput = false;
 let timeout = null;
 let promptParts = [];
@@ -41,6 +44,9 @@ for (let i = 0; i < args.length; i++) {
     for (const pair of (args[++i] || "").split(",")) { const [p, m] = pair.split(":"); if (p && m) cliModels[p.trim()] = m.trim(); }
   }
   else if (a === "--summarize" || a === "-s") { summarize = true; }
+  else if (a === "--discuss" || a === "-d") { discussMode = true; }
+  else if (a === "--max-turns") { maxTurns = parseInt(args[++i]) || 3; }
+  else if (a === "--max-time") { maxTime = parseInt(args[++i]) || 120; }
   else if (a === "--json" || a === "-j") { jsonOutput = true; }
   else if (a === "--timeout" || a === "-t") { timeout = parseInt(args[++i]) * 1000 || null; }
   else if (a === "--sessions" || a === "-H") { cmdSessions(); process.exit(0); }
@@ -99,10 +105,18 @@ async function cmdInit() {
     }
   }
 
+  // Moderator selection
+  console.log("");
+  const moderatorItems = providers.map(pid => ({
+    label: `${PROVIDERS[pid]?.name || pid}${pid === "claude" ? " (recommended)" : ""}`,
+    value: pid,
+  }));
+  const moderatorChoice = await selectFromList("  Moderator (synthesizes all answers):", moderatorItems);
+
   console.log("");
   const timeoutStr = await promptText(t("timeout_prompt"), "120");
 
-  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120 };
+  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, moderator: moderatorChoice, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
   saveConfig(config);
   console.log(`\n  \x1b[32mv\x1b[0m ${t("config_saved")} ${CONFIG_PATH}\n`);
 }
@@ -155,6 +169,9 @@ function cmdHelp() {
     -P, --providers <list>     Providers (comma-separated)
     -M, --models <list>        Models (provider:model,...)
     -s, --summarize            Add synthesis of all answers
+    -d, --discuss              Autonomous discussion mode
+    --max-turns <n>            Max rounds in discuss mode (default: 3)
+    --max-time <sec>           Max time for discussion (default: 120)
     -j, --json                 JSON output (for agent integration)
     -t, --timeout <sec>        Timeout (default: 120)
     -l, --list                 List available providers
@@ -394,6 +411,79 @@ async function main() {
     console.log(`  \x1b[90m${t("skipped", skipped.join(", "))}\x1b[0m`);
   }
 
+  // Discuss mode — autonomous multi-turn debate
+  if (discussMode) {
+    const config = loadConfig() || defaultConfig();
+    const moderatorId = config.moderator || "claude";
+    const moderatorModel = cliModels[moderatorId] || activeModels[moderatorId];
+    const discussMaxTurns = maxTurns;
+    const discussMaxTime = maxTime;
+
+    if (!jsonOutput) {
+      console.log(`\n\x1b[90m  Lun — Discussion mode (moderator: ${moderatorId}, max ${discussMaxTurns} turns, ${discussMaxTime}s)\x1b[0m\n`);
+    }
+
+    const result = await discuss(fullPrompt, activeProviders, {
+      moderator: moderatorId,
+      moderatorModel,
+      models: activeModels,
+      maxTurns: discussMaxTurns,
+      maxTime: discussMaxTime,
+      timeout: activeTimeout,
+      onTurnStart: (turn, question) => {
+        if (jsonOutput) {
+          console.log(JSON.stringify({ event: "turn_start", turn, question }));
+        } else {
+          console.log(`\x1b[33m  ━━━ Round ${turn} ━━━\x1b[0m`);
+          if (turn > 1) console.log(`  \x1b[90mFollow-up: ${question}\x1b[0m\n`);
+        }
+      },
+      onResult: (r) => {
+        if (jsonOutput) {
+          console.log(JSON.stringify({ event: "result", provider: r.provider, text: r.text, elapsed: r.elapsed, error: !!r.error }));
+        } else {
+          const name = PROVIDERS[r.provider]?.name || r.provider;
+          console.log(`\x1b[36m  --- ${name} (${r.elapsed}s) ---\x1b[0m`);
+          console.log(`  ${(r.text || "").replace(/\n/g, "\n  ")}\n`);
+        }
+      },
+      onSynthesis: (text, elapsed) => {
+        if (jsonOutput) {
+          console.log(JSON.stringify({ event: "synthesis", text, elapsed }));
+        } else {
+          console.log(`\x1b[32m  ━━━ Moderator Synthesis (${elapsed}s) ━━━\x1b[0m`);
+          console.log(`  ${text.replace(/\n/g, "\n  ")}\n`);
+        }
+      },
+      onFollowup: (question) => {
+        if (jsonOutput) {
+          console.log(JSON.stringify({ event: "followup", question }));
+        } else {
+          console.log(`\x1b[90m  → Next question: ${question}\x1b[0m\n`);
+        }
+      },
+      onRoute: (plan) => {
+        if (plan.strategy !== "all" && !jsonOutput) {
+          console.log(`  \x1b[90m[${plan.intent}] ${plan.reason}\x1b[0m\n`);
+        }
+      },
+    });
+
+    if (jsonOutput) {
+      console.log(JSON.stringify({ event: "done", turns: result.turns.length, totalTime: result.totalTime }));
+    } else {
+      console.log(`\x1b[90m  ━━━ Discussion complete: ${result.turns.length} rounds, ${result.totalTime}s total ━━━\x1b[0m\n`);
+    }
+
+    // Save session
+    const session = new Session();
+    for (const t of result.turns) {
+      session.addTurn(t.question, [...t.results.map(r => ({ ...r, model: activeModels[r.provider] || "auto" })), { provider: result.moderator, text: t.synthesis, elapsed: t.synthesisElapsed, model: moderatorModel || "auto", isSynthesis: true }]);
+    }
+
+    process.exit(0);
+  }
+
   // One-shot mode
   if (jsonOutput) {
     // NDJSON streaming with moderator routing
@@ -449,14 +539,14 @@ async function main() {
 
     // Summarize
     if (summarize && results.filter(r => !r.error).length > 1) {
-      console.log(`\x1b[33m  --- ${t("summary_title")} ---\x1b[0m`);
+      const config = loadConfig() || defaultConfig();
+      const moderatorId = config.moderator || "claude";
+      console.log(`\x1b[33m  --- ${t("summary_title")} (${PROVIDERS[moderatorId]?.name || moderatorId}) ---\x1b[0m`);
       console.log(`  \x1b[90m${t("summarizing")}\x1b[0m`);
-      const sp = `Analyze these AI agent responses. Summarize: 1) Common points 2) Differences 3) Recommendation.\n\nQuestion: ${fullPrompt}\n\n` +
-        results.filter(r => !r.error).map(r => `### ${PROVIDERS[r.provider]?.name}\n${r.text}`).join("\n\n");
       try {
-        const sr = await runProvider("claude", sp, { model: activeModels.claude || "sonnet", timeout: activeTimeout });
+        const sr = await synthesize(moderatorId, fullPrompt, results, { model: activeModels[moderatorId], timeout: activeTimeout });
         process.stdout.write("\x1b[1A\x1b[2K");
-        console.log(`\x1b[90m  (${sr.elapsed}s, ${activeModels.claude || "sonnet"})\x1b[0m\n`);
+        console.log(`\x1b[90m  (${sr.elapsed}s, ${activeModels[moderatorId] || "auto"})\x1b[0m\n`);
         console.log(`  ${(sr.text || "(failed)").replace(/\n/g, "\n  ")}\n`);
       } catch (e) { console.log(`  \x1b[31m${e.message}\x1b[0m\n`); }
     }

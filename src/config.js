@@ -41,6 +41,12 @@ export function defaultConfig() {
     models: { kiro: "auto", claude: "sonnet", copilot: "auto" },
     timeout: 120,
     sessionsPath: join(LUN_DIR, "sessions"),
+    moderator: "claude",
+    autoDiscuss: {
+      enabled: false,
+      maxTurns: 3,
+      maxTime: 120,
+    },
   };
 }
 

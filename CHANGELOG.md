@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0] — 2026-05-10
+
+### Added
+- **Moderator agent** — configurable agent that synthesizes all answers
+- **Discussion mode** (`--discuss` / `-d`) — autonomous multi-turn debate
+  - Agents answer → moderator synthesizes → generates follow-up → repeat
+  - `--max-turns <n>` — limit rounds (default: 3)
+  - `--max-time <sec>` — time limit (default: 120s)
+- **Moderator selection in `--init`** — choose which agent leads synthesis
+- **`config.moderator`** — persisted moderator preference
+- **`config.autoDiscuss`** — default discuss settings (maxTurns, maxTime)
+- **Synthesis uses dedicated prompt** — better structured output with consensus/conflicts/recommendation
+
+### Changed
+- `--summarize` now uses the configured moderator (not hardcoded to claude)
+- Synthesis prompt improved: includes moderator's own opinion + actionable recommendation
+
 ## [1.3.0] — 2026-05-10
 
 ### Added

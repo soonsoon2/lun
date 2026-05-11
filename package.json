@@ -1,6 +1,6 @@
 {
   "name": "lun",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Multi-agent consensus CLI — ask multiple AI agents and compare answers",
   "type": "module",
   "bin": {

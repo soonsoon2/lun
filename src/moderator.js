@@ -164,3 +164,182 @@ export async function moderatedQuery(prompt, availableProviders, options = {}) {
     results,
   };
 }
+
+// ============================================================
+// MODERATOR SYNTHESIS — the moderator agent summarizes all results
+// ============================================================
+
+const SYNTHESIS_PROMPT = `You are the moderator of a multi-agent discussion. Multiple AI agents were asked the same question and gave their answers below.
+
+Your job:
+1. Summarize the key points from each agent
+2. Identify where they agree (consensus)
+3. Identify where they disagree (conflicts)
+4. Give your own opinion as well
+5. Provide a clear, actionable final recommendation
+
+Be concise and practical. Use bullet points. Write in the same language as the original question.
+
+## Original Question
+{QUESTION}
+
+## Agent Responses
+{RESPONSES}
+
+## Your Task
+Synthesize the above into a clear recommendation.`;
+
+const FOLLOWUP_PROMPT = `You are moderating a multi-agent discussion. Based on the previous round of answers, there are unresolved disagreements or areas that need deeper exploration.
+
+Generate ONE focused follow-up question that would help resolve the key disagreement or explore the most important unexplored angle. The question should be specific and actionable.
+
+## Original Question
+{QUESTION}
+
+## Previous Responses
+{RESPONSES}
+
+## Synthesis So Far
+{SYNTHESIS}
+
+## Your Task
+Write ONE follow-up question (just the question, nothing else) that would help reach better consensus.`;
+
+/**
+ * Run moderator synthesis — the moderator agent summarizes all results.
+ */
+export async function synthesize(moderatorId, originalPrompt, results, options = {}) {
+  const { model, timeout = 120000, onChunk } = options;
+
+  const responsesText = results
+    .filter(r => !r.error)
+    .map(r => `### ${PROVIDERS[r.provider]?.name || r.provider}\n${r.text}`)
+    .join("\n\n");
+
+  const prompt = SYNTHESIS_PROMPT
+    .replace("{QUESTION}", originalPrompt)
+    .replace("{RESPONSES}", responsesText);
+
+  return runProvider(moderatorId, prompt, { model, timeout, onChunk });
+}
+
+/**
+ * Generate a follow-up question for the next discussion round.
+ */
+export async function generateFollowup(moderatorId, originalPrompt, results, synthesis, options = {}) {
+  const { model, timeout = 60000 } = options;
+
+  const responsesText = results
+    .filter(r => !r.error)
+    .map(r => `### ${PROVIDERS[r.provider]?.name || r.provider}\n${r.text}`)
+    .join("\n\n");
+
+  const prompt = FOLLOWUP_PROMPT
+    .replace("{QUESTION}", originalPrompt)
+    .replace("{RESPONSES}", responsesText)
+    .replace("{SYNTHESIS}", synthesis);
+
+  const result = await runProvider(moderatorId, prompt, { model, timeout });
+  return result.text.trim();
+}
+
+/**
+ * Run a full autonomous discussion.
+ *
+ * Flow:
+ * 1. Ask all agents the original question
+ * 2. Moderator synthesizes
+ * 3. If maxTurns > 1, moderator generates follow-up question
+ * 4. Ask agents the follow-up
+ * 5. Repeat until maxTurns or maxTime reached
+ *
+ * Options:
+ *   - moderator: provider ID for the moderator
+ *   - moderatorModel: model for the moderator
+ *   - models: { provider: model } for panelists
+ *   - maxTurns: max discussion rounds (default: 3)
+ *   - maxTime: max total time in seconds (default: 120)
+ *   - timeout: per-provider timeout in ms
+ *   - onTurnStart: (turnNumber, question) => void
+ *   - onResult: (result) => void
+ *   - onSynthesis: (text, elapsed) => void
+ *   - onFollowup: (question) => void
+ */
+export async function discuss(originalPrompt, availableProviders, options = {}) {
+  const {
+    moderator = "claude",
+    moderatorModel,
+    models = {},
+    maxTurns = 3,
+    maxTime = 120,
+    timeout = 120000,
+    onTurnStart,
+    onResult,
+    onSynthesis,
+    onFollowup,
+    onRoute,
+  } = options;
+
+  const startTime = Date.now();
+  const panelists = availableProviders.filter(p => p !== moderator);
+  // Include moderator in panelists too (it gives its own opinion)
+  const allPanelists = availableProviders;
+
+  const turns = [];
+  let currentQuestion = originalPrompt;
+
+  for (let turn = 1; turn <= maxTurns; turn++) {
+    // Check time limit
+    const elapsed = (Date.now() - startTime) / 1000;
+    if (elapsed >= maxTime && turn > 1) break;
+
+    if (onTurnStart) onTurnStart(turn, currentQuestion);
+
+    // 1. Ask all agents
+    const { results, intent, reason, skippedNote } = await moderatedQuery(currentQuestion, allPanelists, {
+      models,
+      timeout,
+      onResult,
+      onRoute,
+    });
+
+    // 2. Moderator synthesizes
+    const synthResult = await synthesize(moderator, currentQuestion, results, {
+      model: moderatorModel || models[moderator],
+      timeout,
+    });
+
+    if (onSynthesis) onSynthesis(synthResult.text, synthResult.elapsed);
+
+    turns.push({
+      turn,
+      question: currentQuestion,
+      results,
+      synthesis: synthResult.text,
+      synthesisElapsed: synthResult.elapsed,
+    });
+
+    // 3. Check if we should continue
+    if (turn >= maxTurns) break;
+    const totalElapsed = (Date.now() - startTime) / 1000;
+    if (totalElapsed >= maxTime) break;
+
+    // 4. Generate follow-up
+    try {
+      const followup = await generateFollowup(moderator, originalPrompt, results, synthResult.text, {
+        model: moderatorModel || models[moderator],
+      });
+      if (onFollowup) onFollowup(followup);
+      currentQuestion = followup;
+    } catch {
+      break; // Can't generate follow-up, stop
+    }
+  }
+
+  return {
+    originalPrompt,
+    moderator,
+    turns,
+    totalTime: ((Date.now() - startTime) / 1000).toFixed(1),
+  };
+}
