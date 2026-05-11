@@ -460,13 +460,15 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               models: {},
               timeout: 120000,
               onRoute: (plan) => {
-                // Notify which agents are being asked
                 for (const pid of plan.providers) {
                   socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
                 }
                 if (plan.strategy !== "all") {
                   socket.send(JSON.stringify({ type: "system", text: `[${plan.intent}] ${plan.reason}` }));
                 }
+              },
+              onChunk: (provider, delta) => {
+                socket.send(JSON.stringify({ type: "provider-chunk", provider, delta }));
               },
               onResult: (r) => {
                 socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
@@ -475,12 +477,10 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               if (skippedNote) {
                 socket.send(JSON.stringify({ type: "system", text: skippedNote }));
               }
-              // Save to thread
               if (threadDir) {
                 appendFileSync(join(threadDir, "messages.ndjson"),
                   JSON.stringify({ ts: Date.now(), role: "assistant", content: results.map(r => `[${r.provider}]\n${r.text}`).join("\n\n---\n\n"), providers: results }) + "\n");
               }
-              // Save session
               try {
                 const session = new Session();
                 session.addTurn(text, results.map(r => ({ ...r, model: "auto" })));
