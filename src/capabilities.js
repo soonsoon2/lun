@@ -66,6 +66,18 @@ export const CAPABILITIES = {
     strengths: ["web search", "multimodal", "very long context (1M+)", "Google ecosystem"],
     weaknesses: [],
   },
+  cline: {
+    search: false,
+    codeGen: true,
+    codeReview: true,
+    fileAccess: true,
+    shellExec: true,
+    imageAnalysis: false,
+    longContext: true,
+    reasoning: true,
+    strengths: ["multi-provider support", "local models (Ollama)", "flexible"],
+    weaknesses: ["no web search"],
+  },
 };
 
 /**

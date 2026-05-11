@@ -79,6 +79,61 @@ export const PROVIDERS = {
       { id: "__custom__", label: "Other (type manually)" },
     ],
   },
+
+  gemini: {
+    name: "Gemini CLI",
+    bin: "gemini",
+    defaultModel: "gemini-2.5-flash",
+    installHint: "npm i -g @google/gemini-cli",
+    buildArgs: (prompt, model, opts = {}) => {
+      const args = ["-p", prompt, "-y"];
+      if (model && model !== "auto") args.push("-m", model);
+      return args;
+    },
+    env: { TERM: "dumb", NO_COLOR: "1" },
+    getModels: () => [
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (default)" },
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+      { id: "__custom__", label: "Other (type manually)" },
+    ],
+  },
+
+  codex: {
+    name: "Codex CLI",
+    bin: "codex",
+    defaultModel: "o3",
+    installHint: "npm i -g @openai/codex",
+    buildArgs: (prompt, model, opts = {}) => {
+      const args = ["exec", prompt];
+      if (model) args.push("-m", model);
+      return args;
+    },
+    env: { TERM: "dumb", NO_COLOR: "1" },
+    getModels: () => [
+      { id: "o3", label: "o3 (default)" },
+      { id: "o4-mini", label: "o4-mini" },
+      { id: "gpt-5.4", label: "GPT-5.4" },
+      { id: "__custom__", label: "Other (type manually)" },
+    ],
+  },
+
+  cline: {
+    name: "Cline CLI",
+    bin: "cline",
+    defaultModel: "auto",
+    installHint: "npm i -g @anthropic-ai/cline",
+    buildArgs: (prompt, model, opts = {}) => {
+      const args = ["-y", prompt];
+      if (model && model !== "auto") args.push("--model", model);
+      return args;
+    },
+    env: { TERM: "dumb", NO_COLOR: "1" },
+    getModels: () => [
+      { id: "auto", label: "Auto (default)" },
+      { id: "__custom__", label: "Other (type manually)" },
+    ],
+  },
 };
 
 export function checkAvailable(providerId) {
