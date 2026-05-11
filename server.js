@@ -397,6 +397,10 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             if (msg.discuss) {
               const config = loadConfig() || defaultConfig();
               const moderatorId = config.moderator || "claude";
+              const modName = PROVIDERS[moderatorId]?.name || moderatorId;
+
+              // Moderator introduces the discussion
+              socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `I'll moderate this discussion. Let me ask the panel for their perspectives, then I'll synthesize the key points.\n\nQuestion for the panel: "${text}"`, elapsed: 0 }));
 
               discuss(text, availableProviders, {
                 moderator: moderatorId,
@@ -406,26 +410,28 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 maxTime: msg.maxTime || config.autoDiscuss?.maxTime || 120,
                 timeout: 120000,
                 onTurnStart: (turn, question) => {
-                  socket.send(JSON.stringify({ type: "discuss-turn", turn, question }));
+                  if (turn > 1) {
+                    socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `There are unresolved points. Let me dig deeper:\n\n"${question}"`, elapsed: 0 }));
+                  }
+                  for (const pid of availableProviders) {
+                    socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
+                  }
                 },
                 onResult: (r) => {
                   socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
                 },
                 onSynthesis: (text, elapsed) => {
-                  socket.send(JSON.stringify({ type: "synthesis", text, elapsed, moderator: moderatorId }));
+                  socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `**Synthesis:**\n\n${text}`, elapsed }));
                 },
-                onFollowup: (question) => {
-                  socket.send(JSON.stringify({ type: "followup", question }));
-                },
+                onFollowup: () => {},
                 onRoute: (plan) => {
-                  for (const pid of plan.providers) {
-                    socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
-                  }
                   if (plan.strategy !== "all") {
                     socket.send(JSON.stringify({ type: "system", text: `[${plan.intent}] ${plan.reason}` }));
                   }
                 },
               }).then((result) => {
+                // Final wrap-up from moderator
+                socket.send(JSON.stringify({ type: "provider-response", provider: moderatorId, text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s total.`, elapsed: 0 }));
                 try {
                   const session = new Session();
                   for (const t of result.turns) {
