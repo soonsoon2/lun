@@ -71,8 +71,20 @@ You need at least one AI agent CLI installed:
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Anthropic's reasoning |
 | [GitHub Copilot](https://docs.github.com/copilot) | `gh extension install github/gh-copilot` | OpenAI/GPT models |
 | [Kiro CLI](https://kiro.dev/docs/cli) | `npm i -g kiro-cli` | AWS-backed multi-model |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google's Gemini models |
+| [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | OpenAI Codex agent |
+| [Cline CLI](https://github.com/cline/cline) | `npm i -g @anthropic-ai/cline` | Multi-provider |
 
-> **More agents coming soon** — Gemini, Codex, and others are planned. Adding a new provider is a single file edit in `src/providers.js`.
+### Gemini CLI setup
+
+Gemini's headless mode (`-p`) requires an API key (OAuth only works in interactive mode):
+
+```bash
+# Get a free key from https://aistudio.google.com/apikey
+echo 'GEMINI_API_KEY=your-key-here' > ~/.gemini/.env
+```
+
+> Adding a new provider is a single file edit in `src/providers.js`.
 
 ---
 

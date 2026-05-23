@@ -32,6 +32,15 @@ This will ask you to:
 
 Your config is saved to `~/.lun/config.json`.
 
+## Gemini CLI Note
+
+Gemini's headless mode (`-p`) requires an API key — OAuth only works in interactive mode.
+
+```bash
+# Get a free key from https://aistudio.google.com/apikey
+echo 'GEMINI_API_KEY=your-key-here' > ~/.gemini/.env
+```
+
 ## Verify Installation
 
 ```bash

@@ -90,7 +90,7 @@ export const PROVIDERS = {
       if (model && model !== "auto") args.push("-m", model);
       return args;
     },
-    env: { TERM: "dumb", NO_COLOR: "1" },
+    env: { TERM: "dumb", NO_COLOR: "1", GOOGLE_GEMINI_BASE_URL: "" },
     cwdOverride: process.env.HOME,
     getModels: () => [
       { id: "gemini-3-flash-preview", label: "Gemini 3 Flash (latest)" },
