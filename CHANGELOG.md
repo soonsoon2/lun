@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.6.0] — 2026-05-10
+
+### Added
+- **`lun chat`** — Lun Agent (PM-style conversational agent)
+  - Inspired by SCA (Soonsoon Custom Agent) architecture
+  - Uses an installed CLI agent as the LLM backend (instead of SAM API)
+  - PM agent orchestrates other CLI agents as "tools"
+  - Tool call format: `<call agent="name">prompt</call>`
+  - Supports `<call agent="all">` for parallel multi-agent queries
+  - Maintains conversation history, saves session
+- **PM Agent selection in `--init`** — choose which agent acts as PM
+- **`config.pmAgent`** — persisted PM preference
+- **`lun --setup-rules`** earlier; web UI streaming, split view, agent chips, mode switch
+
+### Architecture
+- `src/lun-agent.js` — Lun Agent core (chatTurn function)
+- PM agent sees system prompt with available specialists
+- Tool results fed back into PM for synthesis
+- Max 3 tool rounds per turn
+
+## [1.5.0] — 2026-05-10
+
+UI/UX overhaul: split view, progress bar, streaming, agent chips, moderator messages.
+
 ## [1.4.0] — 2026-05-10
 
 ### Added

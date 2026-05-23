@@ -6,6 +6,7 @@
 import { PROVIDERS, checkAvailable, getAvailableProviders } from "../src/providers.js";
 import { runProvider, runAll } from "../src/runner.js";
 import { moderatedQuery, detectIntent, discuss, synthesize } from "../src/moderator.js";
+import { chatTurn } from "../src/lun-agent.js";
 import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
 import { t } from "../src/i18n.js";
@@ -38,6 +39,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === "--config") { cmdConfig(); process.exit(0); }
   if (a === "--setup-rules") { await cmdSetupRules(); process.exit(0); }
   if (a === "serve") { await cmdServe(); process.exit(0); }
+  if (a === "chat") { await cmdChat(); process.exit(0); }
   if (a === "--move-sessions") { await cmdMoveSessions(); process.exit(0); }
   if (a === "--providers" || a === "-P") { cliProviders = args[++i]?.split(",").map(s => s.trim()).filter(Boolean); }
   else if (a === "--models" || a === "-M") {
@@ -113,10 +115,18 @@ async function cmdInit() {
   }));
   const moderatorChoice = await selectFromList("  Moderator (synthesizes all answers):", moderatorItems);
 
+  // PM Agent selection (for `lun chat` mode)
+  console.log("");
+  const pmItems = providers.map(pid => ({
+    label: `${PROVIDERS[pid]?.name || pid}${pid === "codex" ? " (recommended for chat)" : ""}`,
+    value: pid,
+  }));
+  const pmChoice = await selectFromList("  PM Agent (orchestrates `lun chat`):", pmItems);
+
   console.log("");
   const timeoutStr = await promptText(t("timeout_prompt"), "120");
 
-  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, moderator: moderatorChoice, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
+  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, moderator: moderatorChoice, pmAgent: pmChoice, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
   saveConfig(config);
   console.log(`\n  \x1b[32mv\x1b[0m ${t("config_saved")} ${CONFIG_PATH}\n`);
 }
@@ -162,8 +172,9 @@ function cmdHelp() {
   printBanner();
   console.log(`  \x1b[1mUsage:\x1b[0m
     lun                        Interactive mode (REPL)
+    lun chat                   Lun Agent — PM-style conversation
     lun "prompt"               One-shot query to all agents
-    cat file | lun "review"    Pipe content as context
+    lun serve                  Start web UI
 
   \x1b[1mOptions:\x1b[0m
     -P, --providers <list>     Providers (comma-separated)
@@ -234,6 +245,78 @@ async function cmdMoveSessions() {
   config.sessionsPath = resolved;
   saveConfig(config);
   console.log(`  \x1b[32mv\x1b[0m Config updated. Sessions now at: ${resolved}\n`);
+}
+
+// ============================================================
+// CHAT — Lun Agent (PM-style conversational agent)
+// ============================================================
+async function cmdChat() {
+  const config = loadConfig() || defaultConfig();
+  const pmAgent = config.pmAgent || config.moderator || "claude";
+  const pmModel = config.models?.[pmAgent];
+  const availableAgents = Object.keys(PROVIDERS).filter(checkAvailable);
+
+  if (!checkAvailable(pmAgent)) {
+    console.error(`\n  \x1b[31mPM agent "${pmAgent}" is not installed.\x1b[0m\n`);
+    console.error(`  Run \`lun --init\` to configure.\n`);
+    process.exit(1);
+  }
+
+  printBanner();
+  console.log(`  \x1b[1mLun Chat\x1b[0m — PM: ${PROVIDERS[pmAgent]?.name || pmAgent} (${pmModel || "default"})`);
+  console.log(`  \x1b[90mAvailable specialists: ${availableAgents.filter(a => a !== pmAgent).join(", ")}\x1b[0m`);
+  console.log(`  \x1b[90mType your message. /quit to exit, /save to end session.\x1b[0m\n`);
+
+  const session = new Session();
+  const history = [];
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = () => new Promise(r => rl.question("\x1b[36m  > \x1b[0m", r));
+
+  while (true) {
+    const input = await ask();
+    const t = input.trim();
+    if (!t) continue;
+    if (t === "/quit" || t === "/exit") {
+      console.log(`\n  \x1b[32mv\x1b[0m Session saved: ${session.filePath}\n`);
+      break;
+    }
+    if (t === "/save") {
+      console.log(`\n  \x1b[32mv\x1b[0m Saved: ${session.filePath}\n`);
+      continue;
+    }
+
+    try {
+      const result = await chatTurn({
+        pmAgent,
+        pmModel,
+        availableAgents,
+        history,
+        userMessage: t,
+        models: config.models || {},
+        timeout: (config.timeout || 120) * 1000,
+        onPMThinking: (round) => {
+          if (round === 0) console.log(`  \x1b[90m${PROVIDERS[pmAgent]?.name || pmAgent} thinking...\x1b[0m`);
+          else console.log(`  \x1b[90mProcessing tool results (round ${round + 1})...\x1b[0m`);
+        },
+        onToolCall: (agent, prompt) => {
+          const short = prompt.length > 60 ? prompt.slice(0, 60) + "..." : prompt;
+          console.log(`  \x1b[33m→ Calling ${agent}:\x1b[0m \x1b[90m${short}\x1b[0m`);
+        },
+        onToolResult: (agent, text, elapsed) => {
+          const short = text.length > 100 ? text.slice(0, 100) + "..." : text;
+          console.log(`  \x1b[32m← ${agent} (${elapsed}s):\x1b[0m \x1b[90m${short}\x1b[0m`);
+        },
+      });
+
+      console.log(`\n  \x1b[36m${result.response.replace(/\n/g, "\n  ")}\x1b[0m\n`);
+      history.push({ user: t, assistant: result.response });
+      session.addTurn(t, [{ provider: pmAgent, text: result.response, elapsed: result.elapsed, model: pmModel || "auto" }]);
+    } catch (err) {
+      console.log(`  \x1b[31mError: ${err.message}\x1b[0m\n`);
+    }
+  }
+
+  rl.close();
 }
 
 // ============================================================
