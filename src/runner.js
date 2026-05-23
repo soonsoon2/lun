@@ -79,7 +79,7 @@ export function runProvider(providerId, prompt, options = {}) {
     }
 
     const startTime = Date.now();
-    const child = spawn(bin, args, { cwd: cwd || process.env.HOME, env });
+    const child = spawn(bin, args, { cwd: providerDef.cwdOverride || cwd || process.env.HOME, env });
     let stdout = "";
     let stderr = "";
 

@@ -91,6 +91,7 @@ export const PROVIDERS = {
       return args;
     },
     env: { TERM: "dumb", NO_COLOR: "1" },
+    cwdOverride: process.env.HOME,
     getModels: () => [
       { id: "gemini-3-flash-preview", label: "Gemini 3 Flash (latest)" },
       { id: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
