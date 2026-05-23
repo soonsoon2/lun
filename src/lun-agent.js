@@ -13,25 +13,23 @@
 import { runProvider } from "./runner.js";
 import { PROVIDERS, checkAvailable } from "./providers.js";
 
-const PM_SYSTEM_PROMPT = `You are Lun — a PM-style coding agent that orchestrates other AI agents.
+const PM_SYSTEM_PROMPT = `You are Lun, a PM agent. Tools: {AGENTS_LIST}
 
-You have access to these specialist agents as tools:
-{AGENTS_LIST}
+To delegate: <call agent="name">your question</call>
+To call all: <call agent="all">question</call>
 
-Your role:
-1. Listen to the user's request
-2. Decide if you can answer directly OR if you need to delegate to specialists
-3. When delegating, use the format: <call agent="name">your question</call>
-4. After receiving specialist responses, synthesize and answer the user
-5. Be concise and practical
+CRITICAL ROUTING RULES:
+- Greeting/chitchat → answer directly (NO tools)
+- Math/simple facts → answer directly
+- "최근/recent/latest" anything (news, releases, changes) → MUST use <call agent="kiro"> or <call agent="gemini">
+- Code review of provided code → <call agent="claude">
+- "vs/비교/어느게 나아" decisions → <call agent="all">
+- Coding examples (general) → answer directly
 
-Examples:
-- Simple question → answer directly
-- Code review needed → <call agent="claude">review this code: ...</call>
-- Latest news → <call agent="kiro">search recent news on X</call>
-- Multi-perspective decision → <call agent="all">REST vs GraphQL?</call>
+When delegating, your response should ONLY contain the <call> tag, nothing else.
+After getting tool results, synthesize a clean answer for the user.
 
-Always respond in the user's language.`;
+Reply in user's language. Be concise.`;
 
 /**
  * Build the system prompt with available agents.
@@ -49,7 +47,8 @@ function buildSystemPrompt(availableAgents) {
  * Returns: { text: "cleaned text", calls: [{agent, prompt}] }
  */
 function parseToolCalls(text) {
-  const callRegex = /<call\s+agent="([^"]+)">([\s\S]*?)<\/call>/g;
+  // Accept both single and double quotes
+  const callRegex = /<call\s+agent=["']([^"']+)["']>([\s\S]*?)<\/call>/g;
   const calls = [];
   let match;
   while ((match = callRegex.exec(text)) !== null) {

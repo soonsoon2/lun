@@ -118,7 +118,7 @@ async function cmdInit() {
   // PM Agent selection (for `lun chat` mode)
   console.log("");
   const pmItems = providers.map(pid => ({
-    label: `${PROVIDERS[pid]?.name || pid}${pid === "codex" ? " (recommended for chat)" : ""}`,
+    label: `${PROVIDERS[pid]?.name || pid}${pid === "claude" ? " (recommended — fast, light)" : pid === "codex" ? " (slow, heavy context)" : ""}`,
     value: pid,
   }));
   const pmChoice = await selectFromList("  PM Agent (orchestrates `lun chat`):", pmItems);
@@ -270,10 +270,25 @@ async function cmdChat() {
   const session = new Session();
   const history = [];
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const ask = () => new Promise(r => rl.question("\x1b[36m  > \x1b[0m", r));
+  const ask = () => new Promise(r => {
+    let resolved = false;
+    const onClose = () => { if (!resolved) { resolved = true; r(null); } };
+    rl.on("close", onClose);
+    try {
+      rl.question("\x1b[36m  > \x1b[0m", (ans) => {
+        if (resolved) return;
+        resolved = true;
+        rl.removeListener("close", onClose);
+        r(ans);
+      });
+    } catch (e) {
+      if (!resolved) { resolved = true; r(null); }
+    }
+  });
 
   while (true) {
     const input = await ask();
+    if (input === null) break;
     const t = input.trim();
     if (!t) continue;
     if (t === "/quit" || t === "/exit") {
