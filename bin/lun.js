@@ -123,10 +123,30 @@ async function cmdInit() {
   }));
   const pmChoice = await selectFromList("  PM Agent (orchestrates `lun chat`):", pmItems);
 
+  // PM-specific model (separate from main task model)
+  const pmDef = PROVIDERS[pmChoice];
+  const pmModelList = pmDef.getModels();
+  let pmModel = models[pmChoice];
+  if (pmModelList.length > 0) {
+    console.log("");
+    const fastNotes = {
+      claude: "haiku (fast, recommended)",
+      gemini: "gemini-2.5-flash (fast, recommended)",
+      copilot: "claude-haiku-4.5 (fast)",
+    };
+    const note = fastNotes[pmChoice] ? ` — Tip: ${fastNotes[pmChoice]} for routing` : "";
+    const pmModelChoice = await selectFromList(`  PM model${note}:`, pmModelList.map(m => ({ label: m.label, value: m.id })));
+    if (pmModelChoice === "__custom__") {
+      pmModel = await promptText(`  ${pmDef.name} PM model name`, pmDef.defaultModel || "auto");
+    } else {
+      pmModel = pmModelChoice;
+    }
+  }
+
   console.log("");
   const timeoutStr = await promptText(t("timeout_prompt"), "120");
 
-  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, moderator: moderatorChoice, pmAgent: pmChoice, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
+  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, moderator: moderatorChoice, pmAgent: pmChoice, pmModel, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
   saveConfig(config);
   console.log(`\n  \x1b[32mv\x1b[0m ${t("config_saved")} ${CONFIG_PATH}\n`);
 }
@@ -141,6 +161,8 @@ function cmdConfig() {
   console.log(`  Providers: ${config.providers.join(", ")}`);
   console.log(`  Models:`);
   for (const [pid, model] of Object.entries(config.models || {})) console.log(`    ${pid}: ${model}`);
+  if (config.pmAgent) console.log(`  PM Agent:  ${config.pmAgent} (${config.pmModel || config.models?.[config.pmAgent] || "default"})`);
+  if (config.moderator) console.log(`  Moderator: ${config.moderator}`);
   console.log(`  Timeout:   ${config.timeout}s`);
   console.log(`  Sessions:  ${getSessionsDir()}\n`);
 }
@@ -253,7 +275,8 @@ async function cmdMoveSessions() {
 async function cmdChat() {
   const config = loadConfig() || defaultConfig();
   const pmAgent = config.pmAgent || config.moderator || "claude";
-  const pmModel = config.models?.[pmAgent];
+  // pmModel takes precedence over models[pmAgent] — PM uses its own model
+  const pmModel = config.pmModel || config.models?.[pmAgent];
   const availableAgents = Object.keys(PROVIDERS).filter(checkAvailable);
 
   if (!checkAvailable(pmAgent)) {
@@ -323,7 +346,13 @@ async function cmdChat() {
         },
       });
 
-      console.log(`\n  \x1b[36m${result.response.replace(/\n/g, "\n  ")}\x1b[0m\n`);
+      const totalTime = result.elapsed + result.toolCalls.reduce((sum, t) => sum + (t.elapsed || 0), 0);
+      const toolCount = result.toolCalls.length;
+      const stats = toolCount > 0
+        ? `\x1b[90m[${pmAgent} ${result.elapsed}s + ${toolCount} tool(s) = ${totalTime.toFixed(1)}s total]\x1b[0m`
+        : `\x1b[90m[${pmAgent} ${result.elapsed}s]\x1b[0m`;
+      console.log(`\n  \x1b[36m${result.response.replace(/\n/g, "\n  ")}\x1b[0m`);
+      console.log(`  ${stats}\n`);
       history.push({ user: t, assistant: result.response });
       session.addTurn(t, [{ provider: pmAgent, text: result.response, elapsed: result.elapsed, model: pmModel || "auto" }]);
     } catch (err) {
