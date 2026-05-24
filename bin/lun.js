@@ -7,6 +7,7 @@ import { PROVIDERS, checkAvailable, getAvailableProviders } from "../src/provide
 import { runProvider, runAll } from "../src/runner.js";
 import { moderatedQuery, detectIntent, discuss, synthesize } from "../src/moderator.js";
 import { chatTurn } from "../src/lun-agent.js";
+import { SKILLS, AGENT_SKILLS, agentsBySkill } from "../src/skills.js";
 import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
 import { t } from "../src/i18n.js";
@@ -40,6 +41,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === "--setup-rules") { await cmdSetupRules(); process.exit(0); }
   if (a === "serve") { await cmdServe(); process.exit(0); }
   if (a === "chat") { await cmdChat(); process.exit(0); }
+  if (a === "--skills") { cmdSkills(); process.exit(0); }
   if (a === "--move-sessions") { await cmdMoveSessions(); process.exit(0); }
   if (a === "--providers" || a === "-P") { cliProviders = args[++i]?.split(",").map(s => s.trim()).filter(Boolean); }
   else if (a === "--models" || a === "-M") {
@@ -190,6 +192,43 @@ function cmdSessions() {
   console.log(`\n  \x1b[90mPath: ${getSessionsDir()}\x1b[0m\n`);
 }
 
+function cmdSkills() {
+  printBanner();
+  const available = Object.keys(PROVIDERS).filter(checkAvailable);
+  console.log(`  \x1b[1mSkill Matrix\x1b[0m\n`);
+
+  const colorize = (level) => {
+    const map = {
+      expert: "\x1b[32mexpert\x1b[0m",
+      native: "\x1b[36mnative\x1b[0m",
+      common: "\x1b[90mcommon\x1b[0m",
+      none: "\x1b[31mx\x1b[0m",
+    };
+    return map[level] || level;
+  };
+
+  // Header
+  const colWidth = 14;
+  let header = "  " + "skill".padEnd(20);
+  for (const a of available) header += a.padEnd(colWidth);
+  console.log(header);
+  console.log("  " + "-".repeat(20 + colWidth * available.length));
+
+  for (const [skillId, def] of Object.entries(SKILLS)) {
+    let row = "  " + skillId.padEnd(20);
+    for (const a of available) {
+      const level = AGENT_SKILLS[a]?.[skillId] || "none";
+      const colored = colorize(level);
+      // Account for ANSI codes when padding
+      const visibleLen = level.length;
+      row += colored + " ".repeat(Math.max(0, colWidth - visibleLen));
+    }
+    console.log(row);
+  }
+  console.log(`\n  \x1b[1mLegend:\x1b[0m \x1b[32mexpert\x1b[0m = top-tier · \x1b[36mnative\x1b[0m = built-in tool · \x1b[90mcommon\x1b[0m = capable · \x1b[31mx\x1b[0m = unavailable`);
+  console.log(`\n  PM auto-routes by skill. e.g., 'lun "search latest news"' → uses native search agents only.\n`);
+}
+
 function cmdHelp() {
   printBanner();
   console.log(`  \x1b[1mUsage:\x1b[0m
@@ -208,6 +247,7 @@ function cmdHelp() {
     -j, --json                 JSON output (for agent integration)
     -t, --timeout <sec>        Timeout (default: 120)
     -l, --list                 List available providers
+    --skills                   Show skill matrix per agent
     -H, --sessions             View saved sessions
     -v, --version              Version
     -h, --help                 This help

@@ -7,6 +7,7 @@
 import { CAPABILITIES, getProvidersWithCapability } from "./capabilities.js";
 import { PROVIDERS, checkAvailable } from "./providers.js";
 import { runProvider } from "./runner.js";
+import { detectSkill, agentsBySkill, SKILLS } from "./skills.js";
 
 // ============================================================
 // INTENT DETECTION
@@ -61,6 +62,28 @@ export function detectIntent(prompt) {
  * }
  */
 export function planRoute(prompt, availableProviders, options = {}) {
+  // Skill-based routing first (more precise)
+  const skill = detectSkill(prompt);
+  if (skill) {
+    const ranked = agentsBySkill(skill, availableProviders);
+    const capable = ranked.map(r => r.agent);
+    const skipped = availableProviders.filter(p => !capable.includes(p));
+
+    if (capable.length > 0) {
+      const detail = ranked.map(r => `${r.agent}(${r.level})`).join(", ");
+      return {
+        strategy: "skill",
+        providers: capable,
+        fallbackProviders: skipped,
+        reason: `Skill: ${SKILLS[skill]?.label || skill} — using ${detail}`,
+        intent: skill,
+        skill,
+        requiresCapability: skill,
+      };
+    }
+  }
+
+  // Fallback to intent-based routing
   const intent = detectIntent(prompt);
 
   switch (intent) {
@@ -76,7 +99,6 @@ export function planRoute(prompt, availableProviders, options = {}) {
           requiresCapability: "search",
         };
       }
-      // No search-capable agents available, fall through to all
       return {
         strategy: "all",
         providers: availableProviders,
