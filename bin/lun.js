@@ -109,21 +109,15 @@ async function cmdInit() {
     }
   }
 
-  // Moderator selection
-  console.log("");
-  const moderatorItems = providers.map(pid => ({
-    label: `${PROVIDERS[pid]?.name || pid}${pid === "claude" ? " (recommended)" : ""}`,
-    value: pid,
-  }));
-  const moderatorChoice = await selectFromList("  Moderator (synthesizes all answers):", moderatorItems);
-
-  // PM Agent selection (for `lun chat` mode)
+  // PM Agent selection (acts as both chat host and discussion moderator)
   console.log("");
   const pmItems = providers.map(pid => ({
     label: `${PROVIDERS[pid]?.name || pid}${pid === "claude" ? " (recommended — fast, light)" : pid === "codex" ? " (slow, heavy context)" : ""}`,
     value: pid,
   }));
-  const pmChoice = await selectFromList("  PM Agent (orchestrates `lun chat`):", pmItems);
+  const pmChoice = await selectFromList("  PM Agent (chat host & discussion moderator):", pmItems);
+  // Moderator = PM (same agent serves both roles)
+  const moderatorChoice = pmChoice;
 
   // PM-specific model (separate from main task model)
   const pmDef = PROVIDERS[pmChoice];
@@ -581,8 +575,8 @@ async function main() {
   // Discuss mode — autonomous multi-turn debate
   if (discussMode) {
     const config = loadConfig() || defaultConfig();
-    const moderatorId = config.moderator || "claude";
-    const moderatorModel = cliModels[moderatorId] || activeModels[moderatorId];
+    const moderatorId = config.pmAgent || config.moderator || "claude";
+    const moderatorModel = cliModels[moderatorId] || config.pmModel || activeModels[moderatorId];
     const discussMaxTurns = maxTurns;
     const discussMaxTime = maxTime;
 
@@ -707,13 +701,14 @@ async function main() {
     // Summarize
     if (summarize && results.filter(r => !r.error).length > 1) {
       const config = loadConfig() || defaultConfig();
-      const moderatorId = config.moderator || "claude";
+      const moderatorId = config.pmAgent || config.moderator || "claude";
+      const moderatorModel = config.pmModel || activeModels[moderatorId];
       console.log(`\x1b[33m  --- ${t("summary_title")} (${PROVIDERS[moderatorId]?.name || moderatorId}) ---\x1b[0m`);
       console.log(`  \x1b[90m${t("summarizing")}\x1b[0m`);
       try {
-        const sr = await synthesize(moderatorId, fullPrompt, results, { model: activeModels[moderatorId], timeout: activeTimeout });
+        const sr = await synthesize(moderatorId, fullPrompt, results, { model: moderatorModel, timeout: activeTimeout });
         process.stdout.write("\x1b[1A\x1b[2K");
-        console.log(`\x1b[90m  (${sr.elapsed}s, ${activeModels[moderatorId] || "auto"})\x1b[0m\n`);
+        console.log(`\x1b[90m  (${sr.elapsed}s, ${moderatorModel || "auto"})\x1b[0m\n`);
         console.log(`  ${(sr.text || "(failed)").replace(/\n/g, "\n  ")}\n`);
       } catch (e) { console.log(`  \x1b[31m${e.message}\x1b[0m\n`); }
     }

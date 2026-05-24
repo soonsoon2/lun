@@ -459,7 +459,9 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             // Discuss mode
             if (msg.discuss) {
               const config = loadConfig() || defaultConfig();
-              const moderatorId = config.moderator || "claude";
+              // PM agent leads discussions too (use pmAgent if set, else moderator)
+              const moderatorId = config.pmAgent || config.moderator || "claude";
+              const moderatorModel = config.pmModel || config.models?.[moderatorId];
               const modName = PROVIDERS[moderatorId]?.name || moderatorId;
 
               // Moderator introduces the discussion
@@ -467,7 +469,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
               discuss(text, availableProviders, {
                 moderator: moderatorId,
-                moderatorModel: config.models?.[moderatorId],
+                moderatorModel: moderatorModel,
                 models: config.models || {},
                 maxTurns: msg.maxTurns || config.autoDiscuss?.maxTurns || 3,
                 maxTime: msg.maxTime || config.autoDiscuss?.maxTime || 120,
