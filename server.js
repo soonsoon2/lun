@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, appendFileSync, rea
 import { PROVIDERS, checkAvailable } from "./src/providers.js";
 import { runProvider, runAll, stripAnsi, cleanOutput } from "./src/runner.js";
 import { moderatedQuery, detectIntent, discuss, synthesize } from "./src/moderator.js";
+import { chatTurn } from "./src/lun-agent.js";
 import { Session } from "./src/session.js";
 import { loadConfig, defaultConfig, getSessionsDir } from "./src/config.js";
 
@@ -329,6 +330,8 @@ app.get("/ws", { websocket: true }, (socket, req) => {
   let provider = "kiro";
   // Per-provider session tracking for multi-turn
   let providerSessions = { kiro: null, claude: null, copilot: null };
+  // PM chat history (for chat mode)
+  let chatHistory = [];
 
   socket.on("message", (raw) => {
     try {
@@ -406,6 +409,52 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           if (provider === "all") {
             const requestedAgents = msg.agents && msg.agents.length > 0 ? msg.agents : null;
             const availableProviders = Object.keys(PROVIDERS).filter(id => checkAvailable(id) && (!requestedAgents || requestedAgents.includes(id)));
+
+            // Chat mode — PM agent leads, delegates as needed
+            if (msg.mode === "chat") {
+              const config = loadConfig() || defaultConfig();
+              const pmAgent = config.pmAgent || "claude";
+              const pmModel = config.pmModel || config.models?.[pmAgent];
+
+              if (!checkAvailable(pmAgent)) {
+                socket.send(JSON.stringify({ type: "error", message: `PM agent "${pmAgent}" not installed` }));
+                socket.send(JSON.stringify({ type: "done" }));
+                break;
+              }
+
+              socket.send(JSON.stringify({ type: "provider-thinking", provider: pmAgent }));
+
+              chatTurn({
+                pmAgent,
+                pmModel,
+                availableAgents: availableProviders,
+                history: chatHistory,
+                userMessage: text,
+                models: config.models || {},
+                timeout: 120000,
+                onToolCall: (agent, prompt) => {
+                  socket.send(JSON.stringify({ type: "system", text: `→ Calling ${agent}: ${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}` }));
+                  socket.send(JSON.stringify({ type: "provider-thinking", provider: agent }));
+                },
+                onToolResult: (agent, result, elapsed) => {
+                  socket.send(JSON.stringify({ type: "provider-response", provider: agent, text: result, elapsed }));
+                },
+              }).then((result) => {
+                // PM's final synthesis
+                socket.send(JSON.stringify({ type: "provider-response", provider: pmAgent, text: result.response, elapsed: result.elapsed }));
+                chatHistory.push({ user: text, assistant: result.response });
+                if (chatHistory.length > 10) chatHistory.shift();
+                try {
+                  const session = new Session();
+                  session.addTurn(text, [{ provider: pmAgent, text: result.response, elapsed: result.elapsed, model: pmModel || "auto" }]);
+                } catch {}
+                socket.send(JSON.stringify({ type: "done" }));
+              }).catch(err => {
+                socket.send(JSON.stringify({ type: "error", message: err.message }));
+                socket.send(JSON.stringify({ type: "done" }));
+              });
+              break;
+            }
 
             // Discuss mode
             if (msg.discuss) {
