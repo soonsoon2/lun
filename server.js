@@ -10,6 +10,7 @@ import { PROVIDERS, checkAvailable } from "./src/providers.js";
 import { runProvider, runAll, stripAnsi, cleanOutput } from "./src/runner.js";
 import { moderatedQuery, detectIntent, discuss, synthesize } from "./src/moderator.js";
 import { chatTurn } from "./src/lun-agent.js";
+import { handleLargePrompt } from "./src/large-prompt.js";
 import { Session } from "./src/session.js";
 import { loadConfig, defaultConfig, getSessionsDir } from "./src/config.js";
 
@@ -390,8 +391,15 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             break;
           }
 
-          const text = msg.text;
+          let text = msg.text;
           if (!text) break;
+
+          // Auto-offload large prompts to temp file
+          const largeResult = handleLargePrompt(text);
+          if (largeResult.offloaded) {
+            text = largeResult.prompt;
+            socket.send(JSON.stringify({ type: "system", text: `Large prompt (${msg.text.length} chars) offloaded to ${largeResult.filePath}` }));
+          }
 
           // Save user message
           if (threadDir) {
