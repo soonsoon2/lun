@@ -70,10 +70,11 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .mode-pill:hover:not(.active){border-color:var(--border-strong);color:var(--text-primary)}
 
 /* Chat area */
-.chat{flex:1;overflow-y:auto;padding:24px 20px 16px;display:flex;flex-direction:column;gap:24px}
+.chat{flex:1;overflow-y:auto;padding:24px 0 16px;display:flex;flex-direction:column;gap:24px;align-items:center}
 .chat::-webkit-scrollbar{width:8px}
 .chat::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 .chat::-webkit-scrollbar-thumb:hover{background:var(--border-strong)}
+.chat-inner{width:100%;max-width:760px;padding:0 20px;display:flex;flex-direction:column;gap:24px}
 
 /* Welcome */
 .welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-muted)}
@@ -82,7 +83,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .welcome .hint{font-family:var(--font-mono);font-size:11px;color:var(--text-disabled);margin-top:16px}
 
 /* Message */
-.msg{max-width:760px;animation:fadeIn 200ms ease}
+.msg{width:100%;animation:fadeIn 200ms ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
 .msg-row{display:flex;gap:12px}
 .msg-row.user{justify-content:flex-end}
@@ -200,10 +201,12 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
     </div>
 
     <div class="chat" id="chat">
-      <div class="welcome" id="wel">
-        <div class="logo">lun</div>
-        <div class="tag">Multi-agent consensus, in your terminal.</div>
-        <div class="hint">type a question to begin</div>
+      <div class="chat-inner" id="chatInner">
+        <div class="welcome" id="wel">
+          <div class="logo">lun</div>
+          <div class="tag">Multi-agent consensus, in your terminal.</div>
+          <div class="hint">type a question to begin</div>
+        </div>
       </div>
     </div>
 
@@ -221,7 +224,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 </div>
 
 <script>
-const chat=document.getElementById("chat"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),statusDot=document.getElementById("statusDot"),sessList=document.getElementById("sessList"),crumbMode=document.getElementById("crumbMode");
+const chat=document.getElementById("chat"),chatInner=document.getElementById("chatInner"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),statusDot=document.getElementById("statusDot"),sessList=document.getElementById("sessList"),crumbMode=document.getElementById("crumbMode");
 let ws=null,waiting=false,composing=false,mode="chat";
 const AG={kiro:"kiro",claude:"claude",copilot:"copilot",gemini:"gemini",codex:"codex",cline:"cline"};
 let activeAgents=new Set();
@@ -245,7 +248,7 @@ function addUser(text){
   hide();
   const m=el("div","msg user");
   m.innerHTML=`<div class="msg-row user"><div class="msg-content"><div class="msg-body">${esc(text)}</div></div></div>`;
-  chat.appendChild(m);scroll();
+  chatInner.appendChild(m);scroll();
 }
 
 function addAgent(provider,text,elapsed,model){
@@ -254,7 +257,7 @@ function addAgent(provider,text,elapsed,model){
   const time=elapsed?`${elapsed}s`:"";
   const meta=[model||"",time].filter(Boolean).join(" · ");
   m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">${provider}/${model||"auto"}</span></div><div class="msg-body">${md(text||"(no response)")}</div>${meta?`<div class="msg-meta">${esc(meta)}</div>`:""}</div>`;
-  chat.appendChild(m);scroll();
+  chatInner.appendChild(m);scroll();
 }
 
 function addPM(text,elapsed,model){
@@ -263,7 +266,7 @@ function addPM(text,elapsed,model){
   const time=elapsed?`${elapsed}s`:"";
   const meta=[model||"sonnet",time].filter(Boolean).join(" · ");
   m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">pm/${model||"sonnet"}</span></div><div class="msg-body">${md(text||"")}</div><div class="msg-meta">${esc(meta)}</div></div>`;
-  chat.appendChild(m);scroll();
+  chatInner.appendChild(m);scroll();
 }
 
 function addTyping(provider){
@@ -271,12 +274,12 @@ function addTyping(provider){
   const m=el("div",`msg ${provider}`);
   m.id=`ty-${provider}`;
   m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">${provider}/auto</span></div><div class="typing"><span></span><span></span><span></span></div></div>`;
-  chat.appendChild(m);scroll();
+  chatInner.appendChild(m);scroll();
 }
 function removeTyping(provider){const t=document.getElementById(`ty-${provider}`);if(t)t.remove()}
 
-function addSys(text){hide();const d=el("div","sys");d.textContent=text;chat.appendChild(d);scroll()}
-function addRoundDivider(round){hide();const d=el("div","round-divider");d.textContent=`round ${round}`;chat.appendChild(d);scroll()}
+function addSys(text){hide();const d=el("div","sys");d.textContent=text;chatInner.appendChild(d);scroll()}
+function addRoundDivider(round){hide();const d=el("div","round-divider");d.textContent=`round ${round}`;chatInner.appendChild(d);scroll()}
 
 // Sessions
 async function loadSessions(){
@@ -295,7 +298,7 @@ async function loadSessions(){
 async function openSession(id){
   try{const r=await fetch(`/api/sessions/${encodeURIComponent(id)}`);const d=await r.json();
   if(d.error)return;
-  chat.innerHTML="";hide();
+  chatInner.innerHTML="";hide();
   for(const turn of(d.turns||[])){
     addUser(turn.prompt||"");
     for(const res of(turn.results||[]))addAgent(res.provider,res.text,res.elapsed,res.model);
@@ -358,7 +361,7 @@ inp.addEventListener("compositionstart",()=>{composing=true});
 inp.addEventListener("compositionend",()=>{composing=false});
 inp.addEventListener("keydown",(e)=>{if(e.key==="Enter"&&!e.shiftKey&&!composing){e.preventDefault();send()}});
 inp.addEventListener("input",()=>{inp.style.height="22px";inp.style.height=Math.min(inp.scrollHeight,160)+"px"});
-document.getElementById("newBtn").addEventListener("click",()=>{chat.innerHTML="";wel.style.display="flex";chat.appendChild(wel);if(ws&&ws.readyState===1)ws.close();connect()});
+document.getElementById("newBtn").addEventListener("click",()=>{chatInner.innerHTML="";wel.style.display="flex";chatInner.appendChild(wel);if(ws&&ws.readyState===1)ws.close();connect()});
 
 // Init
 connect();loadSessions();loadChips();
