@@ -554,6 +554,31 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           }
 
           // Single provider mode
+          // Codex uses SDK fast path via runProvider — bypasses raw spawn for ~2x speedup on follow-ups
+          if (provider === "codex") {
+            socket.send(JSON.stringify({ type: "thinking" }));
+            runProvider("codex", text, {
+              model: sessionOptions.model,
+              sessionId: sessionId, // reuse SDK thread per WS session
+              cwd: sessionOptions.cwd,
+              timeout: 180000,
+            }).then((result) => {
+              activeChild = null;
+              socket.send(JSON.stringify({ type: "response", tools: [], text: result.text }));
+              if (threadDir && result.text) {
+                appendFileSync(join(threadDir, "messages.ndjson"),
+                  JSON.stringify({ ts: Date.now(), role: "assistant", content: result.text, tools: [] }) + "\n");
+              }
+              socket.send(JSON.stringify({ type: "done" }));
+              console.log(`[codex] responded via SDK (${result.elapsed}s)`);
+            }).catch(err => {
+              activeChild = null;
+              socket.send(JSON.stringify({ type: "error", message: err.message }));
+              socket.send(JSON.stringify({ type: "done" }));
+            });
+            break;
+          }
+
           // Build command based on provider
           const providerDef = PROVIDERS[provider] || PROVIDERS.kiro;
           let args, bin;

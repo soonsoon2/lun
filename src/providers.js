@@ -109,7 +109,9 @@ export const PROVIDERS = {
     defaultModel: "gpt-5.4",
     installHint: "npm i -g @openai/codex",
     buildArgs: (prompt, model, opts = {}) => {
-      const args = ["exec", prompt, "--skip-git-repo-check"];
+      // Flags that minimize cold-start: skip git check, ephemeral session (no disk persist),
+      // skip user config + rules loading. Saves ~1s per invocation.
+      const args = ["exec", prompt, "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--ignore-rules"];
       if (model) args.push("-m", model);
       return args;
     },

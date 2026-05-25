@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
+import { runCodexSDK } from "./codex-sdk-runner.js";
 
 // ============================================================
 // OUTPUT CLEANING
@@ -38,10 +39,22 @@ export function cleanOutput(raw) {
     .replace(/^Changes\s+\+\d+\s+-\d+.*$/gm, "")
     .replace(/^Requests\s+\d+.*$/gm, "")
     .replace(/^Tokens\s+.*$/gm, "")
+    // codex banner / metadata
+    .replace(/^Reading additional input from stdin\.\.\.$/gm, "")
+    .replace(/^OpenAI Codex v.*$/gm, "")
+    .replace(/^workdir:.*$/gm, "")
+    .replace(/^model:.*$/gm, "")
+    .replace(/^provider:.*$/gm, "")
+    .replace(/^approval:.*$/gm, "")
+    .replace(/^sandbox:.*(?:\n\s+.*)*$/gm, "")
+    .replace(/^reasoning effort:.*$/gm, "")
     .replace(/^reasoning summaries:.*$/gm, "")
     .replace(/^session id:.*$/gm, "")
     .replace(/^-{4,}$/gm, "")
     .replace(/^tokens used.*$/gm, "")
+    .replace(/^\d{1,3}(?:,\d{3})*$/gm, "")  // standalone token counts like "12,350"
+    .replace(/^user\s*$/gm, "")
+    .replace(/^codex\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -54,6 +67,18 @@ export function runProvider(providerId, prompt, options = {}) {
   if (!providerDef) return Promise.reject(new Error(`Unknown provider: ${providerId}`));
 
   const { model, sessionId: resumeSessionId, cwd, timeout = 120000, onChunk } = options;
+
+  // Codex fast path: use the SDK so the CLI process is reused across turns.
+  // Cuts cold-start floor from ~5s to ~3-4s on follow-up turns.
+  if (providerId === "codex") {
+    return runCodexSDK(prompt, {
+      sessionKey: resumeSessionId || "default",
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
 
   return new Promise((resolve, reject) => {
     let effectiveSessionId = resumeSessionId || null;
