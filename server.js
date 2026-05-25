@@ -449,7 +449,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 },
               }).then((result) => {
                 // PM's final synthesis
-                socket.send(JSON.stringify({ type: "provider-response", provider: pmAgent, text: result.response, elapsed: result.elapsed }));
+                socket.send(JSON.stringify({ type: "provider-response", provider: pmAgent, text: result.response, elapsed: result.elapsed, model: pmModel }));
                 chatHistory.push({ user: text, assistant: result.response });
                 if (chatHistory.length > 10) chatHistory.shift();
                 try {
@@ -491,7 +491,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                   socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
                 },
                 onResult: (r) => {
-                  socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
+                  socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model }));
                 },
                 onSynthesis: (text, elapsed) => {
                   socket.send(JSON.stringify({ type: "moderator-msg", text: `**Synthesis:**\n\n${text}`, elapsed }));
@@ -515,8 +515,9 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
             // Standard moderated query
             socket.send(JSON.stringify({ type: "thinking" }));
+            const cfg = loadConfig() || defaultConfig();
             moderatedQuery(text, availableProviders, {
-              models: {},
+              models: cfg.models || {},
               timeout: 180000,
               onRoute: (plan) => {
                 for (const pid of plan.providers) {
@@ -530,7 +531,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 socket.send(JSON.stringify({ type: "provider-chunk", provider, delta }));
               },
               onResult: (r) => {
-                socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed }));
+                socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model }));
               },
             }).then(({ results, skippedNote }) => {
               if (skippedNote) {

@@ -62,7 +62,7 @@ export function runProvider(providerId, prompt, options = {}) {
     if (providerId === "claude" && !effectiveSessionId) effectiveSessionId = randomUUID();
     if (providerId === "copilot" && !effectiveSessionId) effectiveSessionId = "kc-" + Date.now();
 
-    const args = providerDef.buildArgs(prompt, model, { sessionId: effectiveSessionId, agent: options.agent });
+    const args = providerDef.buildArgs(prompt, model || providerDef.defaultModel, { sessionId: effectiveSessionId, agent: options.agent });
 
     // Claude first turn: --session-id instead of --resume
     if (providerId === "claude" && !resumeSessionId && effectiveSessionId) {
