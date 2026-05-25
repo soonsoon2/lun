@@ -106,7 +106,7 @@ export const PROVIDERS = {
   codex: {
     name: "Codex CLI",
     bin: "codex",
-    defaultModel: "o3",
+    defaultModel: "o4-mini",
     installHint: "npm i -g @openai/codex",
     buildArgs: (prompt, model, opts = {}) => {
       const args = ["exec", prompt];
@@ -115,10 +115,10 @@ export const PROVIDERS = {
     },
     env: { TERM: "dumb", NO_COLOR: "1" },
     getModels: () => [
-      { id: "gpt-5.5", label: "GPT-5.5 (latest)" },
-      { id: "gpt-5.5-pro", label: "GPT-5.5 Pro" },
+      { id: "o4-mini", label: "o4-mini (fast, recommended)" },
+      { id: "gpt-5.5", label: "GPT-5.5 (latest, slow)" },
+      { id: "gpt-5.5-pro", label: "GPT-5.5 Pro (slowest)" },
       { id: "o3", label: "o3 (reasoning)" },
-      { id: "o4-mini", label: "o4-mini (fast)" },
       { id: "gpt-5.3-codex", label: "GPT-5.3-Codex" },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark (real-time)" },
       { id: "gpt-5.2-codex", label: "GPT-5.2-Codex" },
