@@ -106,7 +106,7 @@ export const PROVIDERS = {
   codex: {
     name: "Codex CLI",
     bin: "codex",
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.4",
     installHint: "npm i -g @openai/codex",
     buildArgs: (prompt, model, opts = {}) => {
       const args = ["exec", prompt];
@@ -115,16 +115,15 @@ export const PROVIDERS = {
     },
     env: { TERM: "dumb", NO_COLOR: "1" },
     getModels: () => [
-      { id: "gpt-5.5", label: "GPT-5.5 (latest, recommended)" },
-      { id: "gpt-5.5-pro", label: "GPT-5.5 Pro (highest quality)" },
+      { id: "gpt-5.4", label: "GPT-5.4 (recommended, no reasoning)" },
+      { id: "gpt-5.5", label: "GPT-5.5 (slow, reasoning)" },
+      { id: "gpt-5.5-pro", label: "GPT-5.5 Pro (slowest, highest quality)" },
       { id: "gpt-5.3-codex", label: "GPT-5.3-Codex" },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3-Codex-Spark (real-time)" },
       { id: "gpt-5.2-codex", label: "GPT-5.2-Codex" },
       { id: "gpt-5.1-codex-max", label: "GPT-5.1-Codex-Max" },
       { id: "gpt-5-codex", label: "GPT-5-Codex" },
-      { id: "gpt-5.4", label: "GPT-5.4" },
-      { id: "o3", label: "o3 (reasoning)" },
-      { id: "o4-mini", label: "o4-mini (fast)" },
+      { id: "o3", label: "o3 (reasoning, may not be supported)" },
       { id: "__custom__", label: "Other (type manually)" },
     ],
   },
