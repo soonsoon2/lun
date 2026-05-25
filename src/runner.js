@@ -91,6 +91,8 @@ export function runProvider(providerId, prompt, options = {}) {
 
     const startTime = Date.now();
     const child = spawn(bin, args, { cwd: providerDef.cwdOverride || cwd || process.env.HOME, env });
+    // Close stdin immediately — codex and some others wait for additional input from stdin
+    if (child.stdin) child.stdin.end();
     let stdout = "";
     let stderr = "";
 

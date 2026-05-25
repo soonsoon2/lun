@@ -109,7 +109,7 @@ export const PROVIDERS = {
     defaultModel: "gpt-5.4",
     installHint: "npm i -g @openai/codex",
     buildArgs: (prompt, model, opts = {}) => {
-      const args = ["exec", prompt];
+      const args = ["exec", prompt, "--skip-git-repo-check"];
       if (model) args.push("-m", model);
       return args;
     },
