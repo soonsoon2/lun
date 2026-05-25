@@ -431,7 +431,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 history: chatHistory,
                 userMessage: text,
                 models: config.models || {},
-                timeout: 120000,
+                timeout: 180000,
                 onToolCall: (agent, prompt) => {
                   socket.send(JSON.stringify({ type: "system", text: `→ Calling ${agent}: ${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}` }));
                   socket.send(JSON.stringify({ type: "provider-thinking", provider: agent }));
@@ -473,7 +473,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 models: config.models || {},
                 maxTurns: msg.maxTurns || config.autoDiscuss?.maxTurns || 3,
                 maxTime: msg.maxTime || config.autoDiscuss?.maxTime || 120,
-                timeout: 120000,
+                timeout: 180000,
                 onTurnStart: (turn, question) => {
                   if (turn > 1) {
                     socket.send(JSON.stringify({ type: "moderator-msg", text: `Let me follow up on the unresolved points:\n\n"${question}"` }));
@@ -509,7 +509,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             socket.send(JSON.stringify({ type: "thinking" }));
             moderatedQuery(text, availableProviders, {
               models: {},
-              timeout: 120000,
+              timeout: 180000,
               onRoute: (plan) => {
                 for (const pid of plan.providers) {
                   socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
