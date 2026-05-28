@@ -370,12 +370,35 @@ function buildChatPrompt(command, prompt) {
 function formatLunMarkdown(result) {
   const items = result.results || [];
   if (!items.length) return "Lun returned no agent responses.";
-  return items.map(item => {
+  const summary = items.map(item => {
     const provider = item.provider || "agent";
     const elapsed = item.elapsed ? `, ${item.elapsed}s` : "";
     const model = item.model ? `, ${item.model}` : "";
-    return `### ${provider}${model}${elapsed}\n\n${item.text || "(no response)"}`;
+    return `## Summary\n\n### ${provider}${model}${elapsed}\n\n${item.text || "(no response)"}`;
   }).join("\n\n---\n\n");
+
+  const full = collectToolOutputs(result.toolCalls || []);
+  if (!full.length) return summary;
+
+  const details = full.map(item => {
+    const elapsed = item.elapsed ? `, ${item.elapsed}s` : "";
+    const model = item.model ? `, ${item.model}` : "";
+    return `### ${item.agent || "agent"}${model}${elapsed}\n\n${item.text || "(no response)"}`;
+  }).join("\n\n---\n\n");
+
+  return `${summary}\n\n---\n\n## Full Agent Opinions\n\n${details}`;
+}
+
+function collectToolOutputs(toolCalls) {
+  const output = [];
+  for (const call of toolCalls || []) {
+    if (Array.isArray(call.children) && call.children.length) {
+      for (const child of call.children) output.push(child);
+      continue;
+    }
+    if (call.agent && call.agent !== "all") output.push(call);
+  }
+  return output;
 }
 
 async function streamDaemonStatus(stream) {
@@ -478,11 +501,7 @@ async function runAndShow({ title, text, mode }) {
 }
 
 function showResult(title, result) {
-  const parts = [];
-  for (const item of result.results || []) {
-    parts.push(`## ${item.provider} (${item.elapsed || 0}s, ${item.model || "auto"})\n\n${item.text || "(no response)"}`);
-  }
-  const docText = `# Lun: ${title}\n\n${parts.join("\n\n---\n\n")}`;
+  const docText = `# Lun: ${title}\n\n${formatLunMarkdown(result)}`;
   vscode.workspace.openTextDocument({ language: "markdown", content: docText })
     .then(doc => vscode.window.showTextDocument(doc, { preview: false }));
 }
@@ -647,8 +666,22 @@ function panelHtml(webview) {
       if (msg.type === "notice") $("results").innerHTML = "<p>" + esc(msg.text) + "</p>";
     });
     function renderResult(result){
-      $("results").innerHTML = (result.results || []).map(r => "<h3>" + esc(r.provider) + " · " + esc(String(r.elapsed || 0)) + "s</h3><pre>" + esc(r.text || "") + "</pre>").join("");
+      const summary = (result.results || []).map(r => "<h3>Summary · " + esc(r.provider) + " · " + esc(String(r.elapsed || 0)) + "s</h3><pre>" + esc(r.text || "") + "</pre>").join("");
+      const full = collectToolOutputs(result.toolCalls || []);
+      const fullHtml = full.length ? "<h3>Full Agent Opinions</h3>" + full.map(r => "<h4>" + esc(r.agent || "agent") + " · " + esc(r.model || "auto") + " · " + esc(String(r.elapsed || 0)) + "s</h4><pre>" + esc(r.text || "") + "</pre>").join("") : "";
+      $("results").innerHTML = summary + fullHtml;
       vscode.postMessage({type:"refresh"});
+    }
+    function collectToolOutputs(toolCalls){
+      const output = [];
+      for (const call of toolCalls || []) {
+        if (Array.isArray(call.children) && call.children.length) {
+          for (const child of call.children) output.push(child);
+        } else if (call.agent && call.agent !== "all") {
+          output.push(call);
+        }
+      }
+      return output;
     }
     function renderState(msg){
       $("workers").innerHTML = table(["provider","model","alive","ready","busy","queued","runs"], (msg.workers.workers || []).map(w => [w.provider,w.model || w.note || "",w.alive,w.ready,w.busy,w.queued ?? "",w.runs ?? ""]));

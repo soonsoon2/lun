@@ -230,19 +230,19 @@ Lun can also run inside VS Code and Copilot Chat.
 
 Download and install the bundled VSIX from this repository:
 
-[Download `lun-0.2.2.vsix`](./extensions/vscode-lun/lun-0.2.2.vsix)
+[Download `lun-0.2.3.vsix`](./extensions/vscode-lun/lun-0.2.3.vsix)
 
 Direct raw download:
 
 ```txt
-https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.2.vsix
+https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.3.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select the downloaded `lun-0.2.2.vsix` file.
+3. Select the downloaded `lun-0.2.3.vsix` file.
 4. Run `Developer: Reload Window`.
 
 The extension connects to the local daemon at `http://127.0.0.1:3456`. If the daemon is not running, it can start it automatically.
@@ -271,6 +271,7 @@ Long-running requests stream progress before the final answer, so you can see wh
 ```
 
 The separate `Lun: Open Panel` command remains useful for daemon status, workers, usage, and logs.
+When Lun delegates to other agents, the Chat response includes both the PM summary and a `Full Agent Opinions` section with each model's full output.
 
 ---
 

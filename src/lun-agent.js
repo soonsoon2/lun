@@ -155,18 +155,18 @@ export async function chatTurn(options) {
               try {
                 if (onToolCall) onToolCall(a, call.prompt);
                 const r = await runProvider(a, call.prompt, { model: models[a], timeout, cwd, onChunk: onToolChunk });
-                const result = { agent: a, text: r.text, elapsed: r.elapsed };
+                const result = { agent: a, model: models[a] || "auto", text: r.text, elapsed: r.elapsed };
                 if (onToolResult) onToolResult(result.agent, result.text, result.elapsed);
                 return result;
               } catch (err) {
-                const result = { agent: a, text: `[Error] ${err.message}`, elapsed: 0, error: true };
+                const result = { agent: a, model: models[a] || "auto", text: `[Error] ${err.message}`, elapsed: 0, error: true };
                 if (onToolResult) onToolResult(result.agent, result.text, result.elapsed);
                 return result;
               }
             })
           );
           const combined = allResults.map(r => `### ${r.agent}\n${r.text}`).join("\n\n");
-          return { agent: "all", text: combined, elapsed: Math.max(0, ...allResults.map(r => r.elapsed || 0)), synthetic: true };
+          return { agent: "all", text: combined, elapsed: Math.max(0, ...allResults.map(r => r.elapsed || 0)), synthetic: true, children: allResults };
         }
 
         // Single agent call
@@ -179,7 +179,7 @@ export async function chatTurn(options) {
           cwd,
           onChunk: onToolChunk,
         });
-        return { agent: call.agent, text: r.text, elapsed: r.elapsed };
+        return { agent: call.agent, model: models[call.agent] || "auto", text: r.text, elapsed: r.elapsed };
       } catch (err) {
         return { agent: call.agent, text: `[Error] ${err.message}`, elapsed: 0, error: true };
       }
