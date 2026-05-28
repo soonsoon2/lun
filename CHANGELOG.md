@@ -77,7 +77,7 @@ UI/UX overhaul: split view, progress bar, streaming, agent chips, moderator mess
 - **NDJSON streaming** (`--json`) — emits `start`, `chunk`, `result`, `done` events line-by-line
 - **Real-time chunks** — `onChunk` callback streams partial output as agents generate
 - **`--setup-rules`** — auto-install lun consultation rules into any project
-- **Agent rule templates** — pre-built rules for Claude, Kiro, Copilot, Gemini, Codex (`rules/`)
+- **Agent rule templates** — pre-built rules for Claude, Kiro, Copilot, Antigravity, Codex (`rules/`)
 - **Session auto-save** — every query (one-shot or interactive) saved to `~/.lun/sessions/`
 
 ### Changed

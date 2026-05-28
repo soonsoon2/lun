@@ -13,13 +13,29 @@ import { chatTurn } from "./src/lun-agent.js";
 import { handleLargePrompt } from "./src/large-prompt.js";
 import { Session } from "./src/session.js";
 import { loadConfig, defaultConfig, getSessionsDir } from "./src/config.js";
+import {
+  DAEMON_LOG_PATH,
+  DAEMON_STATE_PATH,
+  USAGE_LOG_PATH,
+  appendDaemonLog,
+  appendUsageEvent,
+  readDaemonState,
+  readNdjson,
+  summarizeUsage,
+  writeDaemonState,
+} from "./src/daemon-store.js";
+import { getClaudeWorkerStatuses, shutdownClaudeWorkers } from "./src/claude-worker.js";
+import { getManagedAgentWorkerStatuses, shutdownManagedAgentWorkers } from "./src/agent-workers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
 const HOST = process.env.LUN_HOST || process.env.HOST || "127.0.0.1";
+const IS_DAEMON = process.env.LUN_DAEMON === "1";
 const DATA_DIR = join(__dirname, "_data");
 const THREADS_DIR = join(DATA_DIR, "threads");
 const KIRO_SESSIONS_DIR = join(process.env.HOME, ".kiro/sessions/cli");
+let actualPort = PORT;
+const apiChatHistories = new Map();
 
 mkdirSync(THREADS_DIR, { recursive: true });
 
@@ -201,6 +217,51 @@ function summarizeToolResult(content) {
   return parts;
 }
 
+function recordProviderRun({ requestId, sessionId, mode, provider, model, status = "ok", latencyMs, inputText = "", outputText = "", error = null }) {
+  appendUsageEvent({
+    type: "provider_run",
+    requestId,
+    sessionId,
+    mode,
+    provider,
+    model: model || "auto",
+    status,
+    latencyMs: Math.max(0, Math.round(latencyMs || 0)),
+    inputChars: inputText.length,
+    outputChars: outputText.length,
+    error,
+  });
+}
+
+function localFastPath(text) {
+  const normalized = text.trim();
+  const compact = normalized.replace(/\s+/g, "");
+  if (/^(안녕|안녕하세요|하이|hello|hi|hey)[!.?。！ㅋㅎ\s]*$/i.test(normalized)) {
+    return "안녕하세요! 무엇을 도와드릴까요?";
+  }
+
+  const math = compact.match(/^(-?\d+(?:\.\d+)?)([+\-*/×÷])(-?\d+(?:\.\d+)?)(?:이야|인가|은|는|=|\?)*$/);
+  if (math) {
+    const a = Number(math[1]);
+    const b = Number(math[3]);
+    const op = math[2];
+    let value;
+    if (op === "+") value = a + b;
+    else if (op === "-") value = a - b;
+    else if (op === "*" || op === "×") value = a * b;
+    else if (op === "/" || op === "÷") value = b === 0 ? "0으로는 나눌 수 없어요." : a / b;
+    if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(8)));
+    return value;
+  }
+
+  return null;
+}
+
+function writeSse(raw, event, data = {}) {
+  raw.write(`event: ${event}\n`);
+  raw.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
 // ============================================================
 // API: GET /api/providers
 // ============================================================
@@ -211,6 +272,375 @@ app.get("/api/providers", async () => {
     result.push({ id, name: def.name, available: check.status === 0 });
   }
   return { providers: result };
+});
+
+// ============================================================
+// API: daemon dashboard data
+// ============================================================
+app.get("/api/daemon", async () => {
+  return {
+    daemon: IS_DAEMON,
+    pid: process.pid,
+    host: HOST,
+    port: PORT,
+    uptimeSec: Math.round(process.uptime()),
+    state: readDaemonState(),
+    paths: {
+      usage: USAGE_LOG_PATH,
+      log: DAEMON_LOG_PATH,
+      state: DAEMON_STATE_PATH,
+      sessions: getSessionsDir(),
+    },
+  };
+});
+
+app.get("/api/workers", async () => {
+  const config = loadConfig() || defaultConfig();
+  const configuredProviders = config.providers || Object.keys(PROVIDERS);
+  const activeWorkers = [
+    ...getClaudeWorkerStatuses(),
+    ...getManagedAgentWorkerStatuses(),
+    { provider: "codex", alive: true, ready: true, note: "managed by Codex SDK thread cache" },
+  ];
+  const byProvider = new Map(activeWorkers.map(worker => [worker.provider, worker]));
+
+  return {
+    workers: configuredProviders
+      .filter(provider => PROVIDERS[provider])
+      .map(provider => byProvider.get(provider) || {
+        provider,
+        model: config.models?.[provider] || PROVIDERS[provider]?.defaultModel || "auto",
+        alive: false,
+        ready: checkAvailable(provider),
+        persistent: provider === "codex",
+        sessionId: null,
+        queued: 0,
+        busy: false,
+        runs: 0,
+        lastError: null,
+        note: checkAvailable(provider) ? "configured; worker starts on first request" : "configured but executable is unavailable",
+      }),
+  };
+});
+
+app.get("/api/usage", async (req) => {
+  const limit = Number(req.query?.limit || 5000);
+  return summarizeUsage(Math.min(Math.max(limit, 100), 20000));
+});
+
+app.get("/api/logs", async (req) => {
+  const limit = Number(req.query?.limit || 200);
+  return { logs: readNdjson(DAEMON_LOG_PATH, Math.min(Math.max(limit, 20), 1000)), path: DAEMON_LOG_PATH };
+});
+
+app.post("/api/query/stream", async (req, reply) => {
+  const body = req.body || {};
+  const text = String(body.text || "").trim();
+  if (!text) {
+    reply.code(400);
+    return { error: "missing text" };
+  }
+
+  reply.hijack();
+  const raw = reply.raw;
+  raw.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    "connection": "keep-alive",
+    "x-accel-buffering": "no",
+  });
+  raw.write(":\n\n");
+
+  let closed = false;
+  raw.on("close", () => { closed = true; });
+  const send = (event, data = {}) => {
+    if (!closed && !raw.destroyed) writeSse(raw, event, data);
+  };
+
+  const requestId = randomUUID();
+  const sessionId = String(body.sessionId || `api-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const mode = body.mode || "chat";
+  const cwd = normalizeCwd(body.cwd);
+  const config = loadConfig() || defaultConfig();
+  const requestedAgents = Array.isArray(body.agents) && body.agents.length > 0 ? body.agents : (config.providers || Object.keys(PROVIDERS));
+  const availableProviders = requestedAgents.filter(id => PROVIDERS[id] && checkAvailable(id));
+  const timeout = Number(body.timeoutMs || 180000);
+
+  appendUsageEvent({ type: "request", requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+  appendDaemonLog("api stream query received", { requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+
+  try {
+    send("progress", { requestId, stage: "received", message: "Lun daemon received the request" });
+
+    const fastAnswer = mode === "chat" || mode === "auto" ? localFastPath(text) : null;
+    if (fastAnswer) {
+      recordProviderRun({
+        requestId,
+        sessionId,
+        mode,
+        provider: "local",
+        model: "fast-path",
+        latencyMs: 0,
+        inputText: text,
+        outputText: fastAnswer,
+      });
+      send("done", { ok: true, requestId, sessionId, mode, fastPath: true, results: [{ provider: "local", model: "fast-path", text: fastAnswer, elapsed: 0 }] });
+      raw.end();
+      return;
+    }
+
+    if (mode !== "chat") {
+      send("progress", { requestId, stage: "fallback", message: `${mode} mode is running without detailed PM progress` });
+      const routed = await moderatedQuery(text, availableProviders, {
+        models: config.models || {},
+        timeout,
+        onResult: (r) => {
+          recordProviderRun({
+            requestId,
+            sessionId,
+            mode,
+            provider: r.provider,
+            model: config.models?.[r.provider],
+            status: r.error ? "error" : "ok",
+            latencyMs: (r.elapsed || 0) * 1000,
+            inputText: text,
+            outputText: r.text || "",
+            error: r.error ? r.text : null,
+          });
+          send("progress", {
+            requestId,
+            stage: "agent_result",
+            provider: r.provider,
+            elapsed: r.elapsed || 0,
+            message: `${r.provider} finished in ${r.elapsed || 0}s`,
+          });
+        },
+      });
+      send("done", { ok: true, requestId, sessionId, mode, intent: routed.intent, strategy: routed.strategy, skippedNote: routed.skippedNote, results: routed.results });
+      raw.end();
+      return;
+    }
+
+    const pmAgent = config.pmAgent || "claude";
+    const pmModel = config.pmModel || config.models?.[pmAgent];
+    const history = apiChatHistories.get(sessionId) || [];
+    const lastProgressAt = new Map();
+
+    const sendProgress = (stage, provider, message, data = {}, minIntervalMs = 0) => {
+      const key = `${stage}:${provider || ""}:${message}`;
+      const now = Date.now();
+      const last = lastProgressAt.get(key) || 0;
+      if (minIntervalMs && now - last < minIntervalMs) return;
+      lastProgressAt.set(key, now);
+      send("progress", { requestId, stage, provider, message, ...data });
+    };
+
+    sendProgress("pm_start", pmAgent, `${pmAgent} PM is planning the request`, { model: pmModel || "auto" });
+
+    const result = await chatTurn({
+      pmAgent,
+      pmModel,
+      availableAgents: availableProviders,
+      history,
+      userMessage: text,
+      models: config.models || {},
+      cwd,
+      timeout,
+      onPMThinking: (round) => {
+        sendProgress("pm_thinking", pmAgent, `${pmAgent} PM thinking, round ${round + 1}`, { round: round + 1 });
+      },
+      onPMChunk: (provider, chunk) => {
+        sendProgress("pm_streaming", provider, `${provider} is drafting or routing`, { chunkChars: chunk?.length || 0 }, 12000);
+      },
+      onToolCall: (agent, prompt) => {
+        sendProgress("tool_call", agent, agent === "all" ? "Calling all available specialist agents" : `Calling ${agent}`, { inputChars: prompt.length });
+      },
+      onToolChunk: (provider) => {
+        sendProgress("tool_streaming", provider, `${provider} is responding`, {}, 12000);
+      },
+      onToolResult: (agent, output, elapsed) => {
+        recordProviderRun({
+          requestId,
+          sessionId,
+          mode,
+          provider: agent,
+          model: config.models?.[agent],
+          latencyMs: (elapsed || 0) * 1000,
+          inputText: text,
+          outputText: output || "",
+        });
+        send("progress", {
+          requestId,
+          stage: "tool_result",
+          provider: agent,
+          elapsed: elapsed || 0,
+          outputChars: (output || "").length,
+          message: `${agent} finished in ${elapsed || 0}s`,
+        });
+      },
+    });
+
+    recordProviderRun({
+      requestId,
+      sessionId,
+      mode,
+      provider: pmAgent,
+      model: pmModel,
+      latencyMs: (result.elapsed || 0) * 1000,
+      inputText: text,
+      outputText: result.response || "",
+    });
+
+    history.push({ user: text, assistant: result.response });
+    while (history.length > 10) history.shift();
+    apiChatHistories.set(sessionId, history);
+
+    send("done", {
+      ok: true,
+      requestId,
+      sessionId,
+      mode,
+      results: [{ provider: pmAgent, model: pmModel || "auto", text: result.response, elapsed: result.elapsed }],
+      toolCalls: result.toolCalls,
+    });
+    raw.end();
+  } catch (err) {
+    recordProviderRun({ requestId, sessionId, mode, provider: body.provider || "daemon", status: "error", inputText: text, error: err.message });
+    send("error", { error: err.message, requestId, sessionId });
+    raw.end();
+  }
+});
+
+app.post("/api/query", async (req, reply) => {
+  const body = req.body || {};
+  const text = String(body.text || "").trim();
+  if (!text) {
+    reply.code(400);
+    return { error: "missing text" };
+  }
+
+  const requestId = randomUUID();
+  const sessionId = String(body.sessionId || `api-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const mode = body.mode || "ask";
+  const cwd = normalizeCwd(body.cwd);
+  const config = loadConfig() || defaultConfig();
+  const requestedAgents = Array.isArray(body.agents) && body.agents.length > 0 ? body.agents : (config.providers || Object.keys(PROVIDERS));
+  const availableProviders = requestedAgents.filter(id => PROVIDERS[id] && checkAvailable(id));
+
+  appendUsageEvent({ type: "request", requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+  appendDaemonLog("api query received", { requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+
+  try {
+    const fastAnswer = mode === "chat" || mode === "auto" ? localFastPath(text) : null;
+    if (fastAnswer) {
+      recordProviderRun({
+        requestId,
+        sessionId,
+        mode,
+        provider: "local",
+        model: "fast-path",
+        latencyMs: 0,
+        inputText: text,
+        outputText: fastAnswer,
+      });
+      return { ok: true, requestId, sessionId, mode, fastPath: true, results: [{ provider: "local", model: "fast-path", text: fastAnswer, elapsed: 0 }] };
+    }
+
+    if (mode === "chat") {
+      const pmAgent = config.pmAgent || "claude";
+      const pmModel = config.pmModel || config.models?.[pmAgent];
+      const history = apiChatHistories.get(sessionId) || [];
+      const result = await chatTurn({
+        pmAgent,
+        pmModel,
+        availableAgents: availableProviders,
+        history,
+        userMessage: text,
+        models: config.models || {},
+        cwd,
+        timeout: Number(body.timeoutMs || 180000),
+        onToolResult: (agent, output, elapsed) => {
+          recordProviderRun({
+            requestId,
+            sessionId,
+            mode,
+            provider: agent,
+            model: config.models?.[agent],
+            latencyMs: (elapsed || 0) * 1000,
+            inputText: text,
+            outputText: output || "",
+          });
+        },
+      });
+
+      recordProviderRun({
+        requestId,
+        sessionId,
+        mode,
+        provider: pmAgent,
+        model: pmModel,
+        latencyMs: (result.elapsed || 0) * 1000,
+        inputText: text,
+        outputText: result.response || "",
+      });
+
+      history.push({ user: text, assistant: result.response });
+      while (history.length > 10) history.shift();
+      apiChatHistories.set(sessionId, history);
+      return { ok: true, requestId, sessionId, mode, results: [{ provider: pmAgent, model: pmModel || "auto", text: result.response, elapsed: result.elapsed }], toolCalls: result.toolCalls };
+    }
+
+    if (mode === "single" && body.provider) {
+      const providerId = body.provider;
+      if (!PROVIDERS[providerId] || !checkAvailable(providerId)) {
+        reply.code(400);
+        return { error: `provider unavailable: ${providerId}` };
+      }
+      const model = body.model || config.models?.[providerId];
+      const run = await runProvider(providerId, text, {
+        model,
+        sessionId: providerId === "codex" ? sessionId : undefined,
+        cwd,
+        timeout: Number(body.timeoutMs || 180000),
+      });
+      recordProviderRun({
+        requestId,
+        sessionId,
+        mode,
+        provider: providerId,
+        model,
+        latencyMs: (run.elapsed || 0) * 1000,
+        inputText: text,
+        outputText: run.text || "",
+      });
+      return { ok: true, requestId, sessionId, mode, results: [{ provider: providerId, model: model || "auto", text: run.text, elapsed: run.elapsed }] };
+    }
+
+    const routed = await moderatedQuery(text, availableProviders, {
+      models: config.models || {},
+      timeout: Number(body.timeoutMs || 180000),
+      onResult: (r) => {
+        recordProviderRun({
+          requestId,
+          sessionId,
+          mode,
+          provider: r.provider,
+          model: config.models?.[r.provider],
+          status: r.error ? "error" : "ok",
+          latencyMs: (r.elapsed || 0) * 1000,
+          inputText: text,
+          outputText: r.text || "",
+          error: r.error ? r.text : null,
+        });
+      },
+    });
+
+    return { ok: true, requestId, sessionId, mode, intent: routed.intent, strategy: routed.strategy, skippedNote: routed.skippedNote, results: routed.results };
+  } catch (err) {
+    recordProviderRun({ requestId, sessionId, mode, provider: body.provider || "daemon", status: "error", inputText: text, error: err.message });
+    reply.code(500);
+    return { error: err.message, requestId, sessionId };
+  }
 });
 
 // ============================================================
@@ -393,6 +823,36 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
           let text = msg.text;
           if (!text) break;
+          const requestId = randomUUID();
+          const mode = provider === "all" ? (msg.mode || (msg.discuss ? "discuss" : "ask")) : "single";
+          appendUsageEvent({
+            type: "request",
+            requestId,
+            sessionId,
+            mode,
+            provider,
+            inputChars: text.length,
+          });
+          appendDaemonLog("request received", { requestId, sessionId, mode, provider, inputChars: text.length });
+
+          const fastAnswer = mode === "chat" ? localFastPath(text) : null;
+          if (fastAnswer) {
+            socket.send(JSON.stringify({ type: "provider-response", provider: "local", text: fastAnswer, elapsed: 0, model: "fast-path" }));
+            recordProviderRun({
+              requestId,
+              sessionId,
+              mode,
+              provider: "local",
+              model: "fast-path",
+              latencyMs: 0,
+              inputText: text,
+              outputText: fastAnswer,
+            });
+            chatHistory.push({ user: text, assistant: fastAnswer });
+            if (chatHistory.length > 10) chatHistory.shift();
+            socket.send(JSON.stringify({ type: "done" }));
+            break;
+          }
 
           // Auto-offload large prompts to temp file
           const largeResult = handleLargePrompt(text);
@@ -439,6 +899,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 history: chatHistory,
                 userMessage: text,
                 models: config.models || {},
+                cwd: sessionOptions.cwd,
                 timeout: 180000,
                 onToolCall: (agent, prompt) => {
                   socket.send(JSON.stringify({ type: "system", text: `→ Calling ${agent}: ${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}` }));
@@ -446,10 +907,30 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 },
                 onToolResult: (agent, result, elapsed) => {
                   socket.send(JSON.stringify({ type: "provider-response", provider: agent, text: result, elapsed }));
+                  recordProviderRun({
+                    requestId,
+                    sessionId,
+                    mode,
+                    provider: agent,
+                    model: config.models?.[agent],
+                    latencyMs: (elapsed || 0) * 1000,
+                    inputText: text,
+                    outputText: result || "",
+                  });
                 },
               }).then((result) => {
                 // PM's final synthesis
                 socket.send(JSON.stringify({ type: "provider-response", provider: pmAgent, text: result.response, elapsed: result.elapsed, model: pmModel }));
+                recordProviderRun({
+                  requestId,
+                  sessionId,
+                  mode,
+                  provider: pmAgent,
+                  model: pmModel,
+                  latencyMs: (result.elapsed || 0) * 1000,
+                  inputText: text,
+                  outputText: result.response || "",
+                });
                 chatHistory.push({ user: text, assistant: result.response });
                 if (chatHistory.length > 10) chatHistory.shift();
                 try {
@@ -458,6 +939,16 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 } catch {}
                 socket.send(JSON.stringify({ type: "done" }));
               }).catch(err => {
+                recordProviderRun({
+                  requestId,
+                  sessionId,
+                  mode,
+                  provider: pmAgent,
+                  model: pmModel,
+                  status: "error",
+                  inputText: text,
+                  error: err.message,
+                });
                 socket.send(JSON.stringify({ type: "error", message: err.message }));
                 socket.send(JSON.stringify({ type: "done" }));
               });
@@ -492,9 +983,31 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 },
                 onResult: (r) => {
                   socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model }));
+                  recordProviderRun({
+                    requestId,
+                    sessionId,
+                    mode,
+                    provider: r.provider,
+                    model: config.models?.[r.provider],
+                    status: r.error ? "error" : "ok",
+                    latencyMs: (r.elapsed || 0) * 1000,
+                    inputText: text,
+                    outputText: r.text || "",
+                    error: r.error ? r.text : null,
+                  });
                 },
-                onSynthesis: (text, elapsed) => {
-                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Synthesis:**\n\n${text}`, elapsed }));
+                onSynthesis: (synthesisText, elapsed) => {
+                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Synthesis:**\n\n${synthesisText}`, elapsed }));
+                  recordProviderRun({
+                    requestId,
+                    sessionId,
+                    mode,
+                    provider: moderatorId,
+                    model: moderatorModel,
+                    latencyMs: (elapsed || 0) * 1000,
+                    inputText: text,
+                    outputText: synthesisText || "",
+                  });
                 },
                 onFollowup: () => {},
               }).then((result) => {
@@ -532,6 +1045,18 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               },
               onResult: (r) => {
                 socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model }));
+                recordProviderRun({
+                  requestId,
+                  sessionId,
+                  mode,
+                  provider: r.provider,
+                  model: cfg.models?.[r.provider],
+                  status: r.error ? "error" : "ok",
+                  latencyMs: (r.elapsed || 0) * 1000,
+                  inputText: text,
+                  outputText: r.text || "",
+                  error: r.error ? r.text : null,
+                });
               },
             }).then(({ results, skippedNote }) => {
               if (skippedNote) {
@@ -554,6 +1079,51 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           }
 
           // Single provider mode
+          // Codex uses SDK fast path via runProvider — bypasses raw spawn for ~2x speedup on follow-ups
+          if (provider === "codex") {
+            socket.send(JSON.stringify({ type: "thinking" }));
+            runProvider("codex", text, {
+              model: sessionOptions.model,
+              sessionId: sessionId, // reuse SDK thread per WS session
+              cwd: sessionOptions.cwd,
+              timeout: 180000,
+            }).then((result) => {
+              activeChild = null;
+              socket.send(JSON.stringify({ type: "response", tools: [], text: result.text }));
+              recordProviderRun({
+                requestId,
+                sessionId,
+                mode,
+                provider: "codex",
+                model: sessionOptions.model,
+                latencyMs: (result.elapsed || 0) * 1000,
+                inputText: text,
+                outputText: result.text || "",
+              });
+              if (threadDir && result.text) {
+                appendFileSync(join(threadDir, "messages.ndjson"),
+                  JSON.stringify({ ts: Date.now(), role: "assistant", content: result.text, tools: [] }) + "\n");
+              }
+              socket.send(JSON.stringify({ type: "done" }));
+              console.log(`[codex] responded via SDK (${result.elapsed}s)`);
+            }).catch(err => {
+              activeChild = null;
+              recordProviderRun({
+                requestId,
+                sessionId,
+                mode,
+                provider: "codex",
+                model: sessionOptions.model,
+                status: "error",
+                inputText: text,
+                error: err.message,
+              });
+              socket.send(JSON.stringify({ type: "error", message: err.message }));
+              socket.send(JSON.stringify({ type: "done" }));
+            });
+            break;
+          }
+
           // Build command based on provider
           const providerDef = PROVIDERS[provider] || PROVIDERS.kiro;
           let args, bin;
@@ -598,6 +1168,17 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           child.on("error", (err) => {
             childErrored = true;
             activeChild = null;
+            recordProviderRun({
+              requestId,
+              sessionId,
+              mode,
+              provider,
+              model: sessionOptions.model,
+              status: "error",
+              latencyMs: Date.now() - startedAtMs,
+              inputText: text,
+              error: err.message,
+            });
             socket.send(JSON.stringify({ type: "error", message: err.message }));
             socket.send(JSON.stringify({ type: "done" }));
           });
@@ -605,6 +1186,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           child.on("close", (code) => {
             if (childErrored) return;
             activeChild = null;
+            let responseTextForLog = "";
 
             // Provider-specific response handling
             if (provider === "kiro") {
@@ -632,6 +1214,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
               if (response) {
                 socket.send(JSON.stringify({ type: "response", ...response }));
+                responseTextForLog = response.text || "";
                 if (threadDir) {
                   appendFileSync(join(threadDir, "messages.ndjson"),
                     JSON.stringify({ ts: Date.now(), role: "assistant", content: response.text, tools: response.tools }) + "\n");
@@ -645,6 +1228,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                   .replace(/\n{3,}/g, "\n\n")
                   .trim();
                 socket.send(JSON.stringify({ type: "response", tools: [], text: fallback }));
+                responseTextForLog = fallback;
                 if (threadDir && fallback) {
                   appendFileSync(join(threadDir, "messages.ndjson"),
                     JSON.stringify({ ts: Date.now(), role: "assistant", content: fallback, tools: [] }) + "\n");
@@ -661,12 +1245,25 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               // (claude/copilot sessions are pre-set in runProviderAsync)
 
               socket.send(JSON.stringify({ type: "response", tools: [], text: responseText }));
+              responseTextForLog = responseText;
               if (threadDir && responseText) {
                 appendFileSync(join(threadDir, "messages.ndjson"),
                   JSON.stringify({ ts: Date.now(), role: "assistant", content: responseText, tools: [] }) + "\n");
               }
             }
 
+            recordProviderRun({
+              requestId,
+              sessionId,
+              mode,
+              provider,
+              model: sessionOptions.model,
+              status: code === 0 ? "ok" : "error",
+              latencyMs: Date.now() - startedAtMs,
+              inputText: text,
+              outputText: responseTextForLog,
+              error: code === 0 ? null : `exit code ${code}`,
+            });
             socket.send(JSON.stringify({ type: "done" }));
             console.log(`[${provider}] responded (code: ${code})`);
           });
@@ -690,6 +1287,7 @@ await app.listen({ port: PORT, host: HOST }).catch(async (err) => {
     for (let p = PORT + 1; p < PORT + 10; p++) {
       try {
         await app.listen({ port: p, host: HOST });
+        actualPort = p;
         console.log(`
 \x1b[36m  ╦   ╦ ╦ ╔╗╔
   ║   ║ ║ ║║║
@@ -715,8 +1313,23 @@ console.log(`
   ║   ║ ║ ║║║
   ╩═╝ ╚═╝ ╝╚╝\x1b[0m
 
-  \x1b[1mLun\x1b[0m web UI running
-  \x1b[90mLocal:\x1b[0m   http://${HOST}:${PORT}
+  \x1b[1mLun\x1b[0m ${IS_DAEMON ? "daemon dashboard" : "web UI"} running
+  \x1b[90mLocal:\x1b[0m   http://${HOST}:${actualPort}
   \x1b[90mDocs:\x1b[0m    lun --help
   \x1b[90mCtrl+C\x1b[0m   to stop
 `);
+
+writeDaemonState({ pid: process.pid, host: HOST, port: actualPort, url: `http://${HOST}:${actualPort}`, daemon: IS_DAEMON });
+appendDaemonLog(`${IS_DAEMON ? "daemon" : "server"} started`, { pid: process.pid, host: HOST, port: actualPort });
+
+process.on("SIGTERM", () => {
+  shutdownClaudeWorkers();
+  shutdownManagedAgentWorkers();
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  shutdownClaudeWorkers();
+  shutdownManagedAgentWorkers();
+  process.exit(0);
+});

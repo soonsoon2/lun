@@ -4,6 +4,8 @@
       ╩═╝ ╚═╝ ╝╚╝
 ```
 
+![Lun multi-agent dashboard](./lun-image.png)
+
 # One question. Multiple minds. Better decisions.
 
 > Not sure about that AI answer?
@@ -71,17 +73,17 @@ You need at least one AI agent CLI installed:
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Anthropic's reasoning |
 | [GitHub Copilot](https://docs.github.com/copilot) | `gh extension install github/gh-copilot` | OpenAI/GPT models |
 | [Kiro CLI](https://kiro.dev/docs/cli) | `npm i -g kiro-cli` | AWS-backed multi-model |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google's Gemini models |
+| Antigravity CLI | `agy install` | Google Antigravity agent |
 | [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | OpenAI Codex agent |
 | [Cline CLI](https://github.com/cline/cline) | `npm i -g @anthropic-ai/cline` | Multi-provider |
 
-### Gemini CLI setup
+### Antigravity CLI setup
 
-Gemini's headless mode (`-p`) requires an API key (OAuth only works in interactive mode):
+Lun calls Antigravity through `agy` in print mode:
 
 ```bash
-# Get a free key from https://aistudio.google.com/apikey
-echo 'GEMINI_API_KEY=your-key-here' > ~/.gemini/.env
+agy install
+agy -p "hello"
 ```
 
 > Adding a new provider is a single file edit in `src/providers.js`.
@@ -143,7 +145,7 @@ Or auto-install rules for all agents:
 lun --setup-rules
 ```
 
-This creates rule files for Claude (`CLAUDE.md`), Kiro (`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`), Gemini, and Codex.
+This creates rule files for Claude (`CLAUDE.md`), Kiro (`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`), Antigravity, and Codex.
 
 ---
 
@@ -209,6 +211,52 @@ LUN_PORT=8080 lun serve
 ```
 
 Features: real-time streaming, session history sidebar, per-agent model settings, smart routing with system messages.
+
+---
+
+## VS Code Extension
+
+Lun can also run inside VS Code and Copilot Chat.
+
+Install the bundled VSIX from this repository:
+
+```txt
+extensions/vscode-lun/lun-0.2.2.vsix
+```
+
+In VS Code:
+
+1. Open Extensions.
+2. Choose `Install from VSIX...`.
+3. Select `extensions/vscode-lun/lun-0.2.2.vsix`.
+4. Run `Developer: Reload Window`.
+
+The extension connects to the local daemon at `http://127.0.0.1:3456`. If the daemon is not running, it can start it automatically.
+
+### VS Code Chat and Copilot Chat
+
+When VS Code Chat or Copilot Chat is available, Lun registers as `@lun`:
+
+```txt
+@lun review this project
+@lun /review
+@lun /diagnostics
+@lun /status
+@lun /workers
+```
+
+Long-running requests stream progress before the final answer, so you can see which stage is active:
+
+```txt
+0.1s: Lun daemon received the request
+0.2s: claude PM is planning the request
+0.3s: claude PM thinking, round 1
+1.8s: claude is drafting or routing
+8.4s: Calling all available specialist agents
+15.2s: agy finished in 6.8s
+```
+
+The separate `Lun: Open Panel` command remains useful for daemon status, workers, usage, and logs.
 
 ---
 

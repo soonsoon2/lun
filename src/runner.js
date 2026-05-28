@@ -5,6 +5,9 @@ import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
+import { runCodexSDK } from "./codex-sdk-runner.js";
+import { runClaudeWorker } from "./claude-worker.js";
+import { runManagedAgentWorker } from "./agent-workers.js";
 
 // ============================================================
 // OUTPUT CLEANING
@@ -38,10 +41,21 @@ export function cleanOutput(raw) {
     .replace(/^Changes\s+\+\d+\s+-\d+.*$/gm, "")
     .replace(/^Requests\s+\d+.*$/gm, "")
     .replace(/^Tokens\s+.*$/gm, "")
+    // codex banner / metadata
+    .replace(/^Reading additional input from stdin\.\.\.$/gm, "")
+    .replace(/^OpenAI Codex v.*$/gm, "")
+    .replace(/^workdir:.*$/gm, "")
+    .replace(/^model:.*$/gm, "")
+    .replace(/^provider:.*$/gm, "")
+    .replace(/^approval:.*$/gm, "")
+    .replace(/^sandbox:.*(?:\n\s+.*)*$/gm, "")
+    .replace(/^reasoning effort:.*$/gm, "")
     .replace(/^reasoning summaries:.*$/gm, "")
     .replace(/^session id:.*$/gm, "")
     .replace(/^-{4,}$/gm, "")
     .replace(/^tokens used.*$/gm, "")
+    .replace(/^user\s*$/gm, "")
+    .replace(/^codex\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -55,6 +69,36 @@ export function runProvider(providerId, prompt, options = {}) {
 
   const { model, sessionId: resumeSessionId, cwd, timeout = 120000, onChunk } = options;
 
+  // Codex fast path: use the SDK so the CLI process is reused across turns.
+  // Cuts cold-start floor from ~5s to ~3-4s on follow-up turns.
+  if (providerId === "codex") {
+    return runCodexSDK(prompt, {
+      sessionKey: resumeSessionId || "default",
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
+
+  if (providerId === "claude" && process.env.LUN_DAEMON === "1" && process.env.LUN_DISABLE_CLAUDE_WORKER !== "1") {
+    return runClaudeWorker(prompt, {
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
+
+  if (["kiro", "copilot", "agy"].includes(providerId) && process.env.LUN_DAEMON === "1") {
+    return runManagedAgentWorker(providerId, prompt, {
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
+
   return new Promise((resolve, reject) => {
     let effectiveSessionId = resumeSessionId || null;
 
@@ -62,7 +106,7 @@ export function runProvider(providerId, prompt, options = {}) {
     if (providerId === "claude" && !effectiveSessionId) effectiveSessionId = randomUUID();
     if (providerId === "copilot" && !effectiveSessionId) effectiveSessionId = "kc-" + Date.now();
 
-    const args = providerDef.buildArgs(prompt, model || providerDef.defaultModel, { sessionId: effectiveSessionId, agent: options.agent });
+    const args = providerDef.buildArgs(prompt, model || providerDef.defaultModel, { sessionId: effectiveSessionId, agent: options.agent, cwd });
 
     // Claude first turn: --session-id instead of --resume
     if (providerId === "claude" && !resumeSessionId && effectiveSessionId) {

@@ -80,26 +80,20 @@ export const PROVIDERS = {
     ],
   },
 
-  gemini: {
-    name: "Gemini CLI",
-    bin: "gemini",
-    defaultModel: "gemini-2.5-flash",
-    installHint: "npm i -g @google/gemini-cli",
+  agy: {
+    name: "Antigravity",
+    bin: "agy",
+    defaultModel: "auto",
+    installHint: "Install Google Antigravity CLI and run `agy install`",
     buildArgs: (prompt, model, opts = {}) => {
-      const args = ["-p", prompt, "-y"];
-      if (model && model !== "auto") args.push("-m", model);
+      const args = ["-p", prompt, "--dangerously-skip-permissions", "--print-timeout", "5m"];
+      if (opts.sessionId) args.push("--conversation", opts.sessionId);
+      if (opts.cwd) args.push("--add-dir", opts.cwd);
       return args;
     },
-    env: { TERM: "dumb", NO_COLOR: "1", GOOGLE_GEMINI_BASE_URL: "" },
-    cwdOverride: process.env.HOME,
+    env: { TERM: "dumb", NO_COLOR: "1" },
     getModels: () => [
-      { id: "gemini-3-flash-preview", label: "Gemini 3 Flash (latest)" },
-      { id: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
-      { id: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash-Lite" },
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (default)" },
-      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
-      { id: "__custom__", label: "Other (type manually)" },
+      { id: "auto", label: "Auto (Antigravity default)" },
     ],
   },
 
@@ -109,7 +103,9 @@ export const PROVIDERS = {
     defaultModel: "gpt-5.4",
     installHint: "npm i -g @openai/codex",
     buildArgs: (prompt, model, opts = {}) => {
-      const args = ["exec", prompt, "--skip-git-repo-check"];
+      // Flags that minimize cold-start: skip git check, ephemeral session (no disk persist),
+      // skip user config + rules loading. Saves ~1s per invocation.
+      const args = ["exec", prompt, "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--ignore-rules"];
       if (model) args.push("-m", model);
       return args;
     },

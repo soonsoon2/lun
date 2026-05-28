@@ -23,10 +23,30 @@ export function ensureDirs() {
 
 export function loadConfig() {
   try {
-    return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    return normalizeConfig(JSON.parse(readFileSync(CONFIG_PATH, "utf-8")));
   } catch {
     return null;
   }
+}
+
+function normalizeConfig(config) {
+  if (!config) return config;
+  const next = { ...config };
+
+  if (Array.isArray(next.providers)) {
+    next.providers = next.providers.map(id => id === "gemini" ? "agy" : id);
+    next.providers = [...new Set(next.providers)];
+  }
+
+  if (next.models?.gemini && !next.models?.agy) {
+    next.models = { ...next.models, agy: "auto" };
+    delete next.models.gemini;
+  }
+
+  if (next.pmAgent === "gemini") next.pmAgent = "agy";
+  if (next.moderator === "gemini") next.moderator = "agy";
+
+  return next;
 }
 
 export function saveConfig(config) {
@@ -38,7 +58,7 @@ export function defaultConfig() {
   return {
     language: "en",
     providers: ["kiro", "claude", "copilot"],
-    models: { kiro: "auto", claude: "sonnet", copilot: "auto" },
+    models: { kiro: "auto", claude: "sonnet", copilot: "auto", agy: "auto" },
     timeout: 120,
     sessionsPath: join(LUN_DIR, "sessions"),
     moderator: "claude",
