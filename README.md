@@ -4,6 +4,8 @@
       ╩═╝ ╚═╝ ╝╚╝
 ```
 
+![Lun multi-agent dashboard](./lun-image.png)
+
 # One question. Multiple minds. Better decisions.
 
 > Not sure about that AI answer?

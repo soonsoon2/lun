@@ -29,7 +29,8 @@
     "docs/",
     "extensions/",
     "server.js",
-    "README.md"
+    "README.md",
+    "lun-image.png"
   ],
   "engines": {
     "node": ">=18.0.0"
