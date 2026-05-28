@@ -212,6 +212,52 @@ Features: real-time streaming, session history sidebar, per-agent model settings
 
 ---
 
+## VS Code Extension
+
+Lun can also run inside VS Code and Copilot Chat.
+
+Install the bundled VSIX from this repository:
+
+```txt
+extensions/vscode-lun/lun-0.2.1.vsix
+```
+
+In VS Code:
+
+1. Open Extensions.
+2. Choose `Install from VSIX...`.
+3. Select `extensions/vscode-lun/lun-0.2.1.vsix`.
+4. Run `Developer: Reload Window`.
+
+The extension connects to the local daemon at `http://127.0.0.1:3456`. If the daemon is not running, it can start it automatically.
+
+### VS Code Chat and Copilot Chat
+
+When VS Code Chat or Copilot Chat is available, Lun registers as `@lun`:
+
+```txt
+@lun review this project
+@lun /review
+@lun /diagnostics
+@lun /status
+@lun /workers
+```
+
+Long-running requests stream progress before the final answer, so you can see which stage is active:
+
+```txt
+0.1s: Lun daemon received the request
+0.2s: claude PM is planning the request
+0.3s: claude PM thinking, round 1
+1.8s: claude is drafting or routing
+8.4s: Calling all available specialist agents
+15.2s: agy finished in 6.8s
+```
+
+The separate `Lun: Open Panel` command remains useful for daemon status, workers, usage, and logs.
+
+---
+
 ## Configuration
 
 Stored at `~/.lun/config.json`:
