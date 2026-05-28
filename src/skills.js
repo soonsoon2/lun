@@ -92,15 +92,15 @@ export const AGENT_SKILLS = {
     "file-edit": "native",
     "shell-exec": "native",
   },
-  gemini: {
+  agy: {
     "chat": "common",
     "code-gen": "common",
     "code-review": "common",
     "web-search": "native",        // built-in search
     "image-analysis": "expert",    // multimodal native
-    "long-context": "expert",      // 1M+ tokens
+    "long-context": "expert",
     "deep-reasoning": "common",
-    "fast-routing": "common",      // gemini-2.5-flash
+    "fast-routing": "common",
     "file-edit": "common",
     "shell-exec": "common",
   },

@@ -17,7 +17,7 @@ This installs rule files for each agent:
 | Claude Code | `CLAUDE.md` |
 | Kiro | `.kiro/steering/lun.md` |
 | GitHub Copilot | `.github/copilot-instructions.md` |
-| Gemini | `.gemini/AGENTS.md` |
+| Antigravity | `.antigravity/AGENTS.md` |
 | Codex/OpenAI | `AGENTS.md` |
 
 ## Manual Setup

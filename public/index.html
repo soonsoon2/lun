@@ -17,7 +17,7 @@
   /* Text */
   --text-primary:#fafafa;--text-secondary:#a1a1aa;--text-muted:#52525b;--text-disabled:#3f3f46;
   /* Agent accents */
-  --kiro:#a78bfa;--claude:#f59e0b;--copilot:#4ade80;--gemini:#60a5fa;--codex:#fb7185;--cline:#fbbf24;--pm:#4ade80;
+  --kiro:#a78bfa;--claude:#f59e0b;--copilot:#4ade80;--agy:#60a5fa;--gemini:#60a5fa;--codex:#fb7185;--cline:#fbbf24;--pm:#4ade80;
   /* Semantic */
   --success:#4ade80;--warning:#f59e0b;--error:#ef4444;--info:#60a5fa;
   /* Fonts */
@@ -129,7 +129,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .msg.kiro .agent-tag{color:var(--kiro)}
 .msg.claude .agent-tag{color:var(--claude)}
 .msg.copilot .agent-tag{color:var(--copilot)}
-.msg.gemini .agent-tag{color:var(--gemini)}
+.msg.agy .agent-tag,.msg.gemini .agent-tag{color:var(--agy)}
 .msg.codex .agent-tag{color:var(--codex)}
 .msg.cline .agent-tag{color:var(--cline)}
 
@@ -179,7 +179,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .chip.on.kiro{color:var(--kiro);border-color:rgba(167,139,250,0.3)}
 .chip.on.claude{color:var(--claude);border-color:rgba(245,158,11,0.3)}
 .chip.on.copilot{color:var(--copilot);border-color:rgba(74,222,128,0.3)}
-.chip.on.gemini{color:var(--gemini);border-color:rgba(96,165,250,0.3)}
+.chip.on.agy,.chip.on.gemini{color:var(--agy);border-color:rgba(96,165,250,0.3)}
 .chip.on.codex{color:var(--codex);border-color:rgba(251,113,133,0.3)}
 .chip:hover{border-color:var(--border-strong)}
 
@@ -195,10 +195,23 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .panel-card.kiro{border-top-color:var(--kiro)}
 .panel-card.claude{border-top-color:var(--claude)}
 .panel-card.copilot{border-top-color:var(--copilot)}
-.panel-card.gemini{border-top-color:var(--gemini)}
+.panel-card.agy,.panel-card.gemini{border-top-color:var(--agy)}
 .panel-card.codex{border-top-color:var(--codex)}
 .synthesis{background:var(--bg-elevated);border:1px solid var(--border);border-left:3px solid var(--pm);border-radius:8px;padding:18px}
 .synthesis .label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--pm);margin-bottom:8px}
+
+/* Dashboard */
+.dash{width:100%;max-width:980px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:14px}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.metric{border:1px solid var(--border);background:var(--bg-elevated);border-radius:8px;padding:12px}
+.metric .k{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+.metric .v{font-family:var(--font-mono);font-size:24px;line-height:1.2;margin-top:4px;color:var(--text-primary)}
+.dash-table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11px;border:1px solid var(--border)}
+.dash-table th,.dash-table td{border-bottom:1px solid var(--border-subtle);padding:8px 10px;text-align:left;vertical-align:top}
+.dash-table th{color:var(--text-muted);font-weight:500;background:var(--bg-elevated);text-transform:uppercase;letter-spacing:.06em}
+.dash-table tr:last-child td{border-bottom:none}
+.dash-path{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);word-break:break-all}
+.dash-empty{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);padding:24px 0;text-align:center}
 </style>
 </head>
 <body>
@@ -232,6 +245,9 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
         <button class="mode-pill active" data-mode="chat">chat</button>
         <button class="mode-pill" data-mode="discuss">discuss</button>
         <button class="mode-pill" data-mode="ask">ask</button>
+        <button class="mode-pill" data-mode="workers">workers</button>
+        <button class="mode-pill" data-mode="usage">usage</button>
+        <button class="mode-pill" data-mode="logs">logs</button>
       </div>
     </div>
 
@@ -246,7 +262,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
       </div>
     </div>
 
-    <div class="input-area">
+    <div class="input-area" id="inputArea">
       <div class="chips" id="chips"></div>
       <div id="attachments"></div>
       <div class="cmd-row">
@@ -263,9 +279,9 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 </div>
 
 <script>
-const chat=document.getElementById("chat"),chatInner=document.getElementById("chatInner"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),statusDot=document.getElementById("statusDot"),sessList=document.getElementById("sessList"),crumbMode=document.getElementById("crumbMode");
+const chat=document.getElementById("chat"),chatInner=document.getElementById("chatInner"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),statusDot=document.getElementById("statusDot"),sessList=document.getElementById("sessList"),crumbMode=document.getElementById("crumbMode"),inputArea=document.getElementById("inputArea");
 let ws=null,waiting=false,composing=false,mode="chat";
-const AG={kiro:"kiro",claude:"claude",copilot:"copilot",gemini:"gemini",codex:"codex",cline:"cline"};
+const AG={kiro:"kiro",claude:"claude",copilot:"copilot",agy:"agy",codex:"codex",cline:"cline"};
 let activeAgents=new Set();
 
 // Mode pills
@@ -274,7 +290,11 @@ document.querySelectorAll(".mode-pill").forEach(p=>p.addEventListener("click",()
   p.classList.add("active");
   mode=p.dataset.mode;
   crumbMode.textContent=mode;
+  inputArea.style.display=(mode==="usage"||mode==="logs"||mode==="workers")?"none":"block";
   inp.placeholder=mode==="chat"?"chat with PM...":mode==="discuss"?"start a discussion...":"ask all agents...";
+  if(mode==="workers")renderWorkers();
+  if(mode==="usage")renderUsage();
+  if(mode==="logs")renderLogs();
 }));
 
 function el(t,c){const e=document.createElement("div");if(c)e.className=c;return e}
@@ -347,6 +367,66 @@ async function openSession(id){
     for(const res of(turn.results||[]))addAgent(res.provider,res.text,res.elapsed,res.model);
   }
   }catch{}}
+
+function fmtMs(ms){return ms===0?"0.00s":ms?`${(ms/1000).toFixed(ms>=10000?1:2)}s`:"-"}
+function fmtTime(ts){try{return new Date(ts).toLocaleString()}catch{return ts||""}}
+
+async function renderUsage(){
+  hide();
+  chatInner.innerHTML='<div class="dash-empty">loading usage...</div>';
+  try{
+    const [uRes,dRes]=await Promise.all([fetch("/api/usage"),fetch("/api/daemon")]);
+    const usage=await uRes.json();
+    const daemon=await dRes.json();
+    const t=usage.totals||{};
+    const providers=usage.providers||[];
+    const recent=usage.recent||[];
+    chatInner.innerHTML=`<div class="dash">
+      <div class="dash-grid">
+        <div class="metric"><div class="k">runs</div><div class="v">${t.runs||0}</div></div>
+        <div class="metric"><div class="k">ok</div><div class="v">${t.ok||0}</div></div>
+        <div class="metric"><div class="k">errors</div><div class="v">${t.errors||0}</div></div>
+        <div class="metric"><div class="k">avg</div><div class="v">${fmtMs(t.avgLatencyMs)}</div></div>
+      </div>
+      <div class="dash-path">${esc(daemon.paths?.usage||usage.path||"")}</div>
+      ${providers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>runs</th><th>ok</th><th>err</th><th>avg</th><th>chars</th><th>model</th></tr></thead><tbody>${providers.map(p=>`<tr><td>${esc(p.provider)}</td><td>${p.count}</td><td>${p.ok}</td><td>${p.errors}</td><td>${fmtMs(p.avgLatencyMs)}</td><td>${p.inputChars}/${p.outputChars}</td><td>${esc(p.lastModel||"auto")}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no provider runs yet</div>`}
+      ${recent.length?`<table class="dash-table"><thead><tr><th>time</th><th>mode</th><th>provider</th><th>status</th><th>latency</th><th>output</th></tr></thead><tbody>${recent.slice(0,20).map(r=>`<tr><td>${esc(fmtTime(r.ts))}</td><td>${esc(r.mode||"")}</td><td>${esc(r.provider||"")}</td><td>${esc(r.status||"")}</td><td>${fmtMs(r.latencyMs)}</td><td>${r.outputChars||0}</td></tr>`).join("")}</tbody></table>`:""}
+    </div>`;
+  }catch(e){
+    chatInner.innerHTML=`<div class="dash-empty">usage unavailable</div>`;
+  }
+}
+
+async function renderLogs(){
+  hide();
+  chatInner.innerHTML='<div class="dash-empty">loading logs...</div>';
+  try{
+    const r=await fetch("/api/logs?limit=200");
+    const d=await r.json();
+    const logs=d.logs||[];
+    chatInner.innerHTML=`<div class="dash">
+      <div class="dash-path">${esc(d.path||"")}</div>
+      ${logs.length?`<table class="dash-table"><thead><tr><th>time</th><th>level</th><th>message</th><th>detail</th></tr></thead><tbody>${logs.slice().reverse().map(l=>`<tr><td>${esc(fmtTime(l.ts))}</td><td>${esc(l.level||"info")}</td><td>${esc(l.message||"")}</td><td>${esc(JSON.stringify(Object.fromEntries(Object.entries(l).filter(([k])=>!["ts","level","message"].includes(k))))).slice(0,240)}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no logs yet</div>`}
+    </div>`;
+  }catch(e){
+    chatInner.innerHTML=`<div class="dash-empty">logs unavailable</div>`;
+  }
+}
+
+async function renderWorkers(){
+  hide();
+  chatInner.innerHTML='<div class="dash-empty">loading workers...</div>';
+  try{
+    const r=await fetch("/api/workers");
+    const d=await r.json();
+    const workers=d.workers||[];
+    chatInner.innerHTML=`<div class="dash">
+      ${workers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>model</th><th>alive</th><th>ready</th><th>busy</th><th>queued</th><th>runs</th><th>session</th></tr></thead><tbody>${workers.map(w=>`<tr><td>${esc(w.provider||"")}</td><td>${esc(w.model||w.note||"")}</td><td>${w.alive?"yes":"no"}</td><td>${w.ready?"yes":"no"}</td><td>${w.busy?"yes":"no"}</td><td>${w.queued??""}</td><td>${w.runs??""}</td><td>${esc((w.sessionId||"").slice(0,12))}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no workers yet</div>`}
+    </div>`;
+  }catch(e){
+    chatInner.innerHTML=`<div class="dash-empty">workers unavailable</div>`;
+  }
+}
 
 // Chips
 async function loadChips(){
