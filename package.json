@@ -27,6 +27,7 @@
     "public/",
     "rules/",
     "docs/",
+    "extensions/",
     "server.js",
     "README.md"
   ],
