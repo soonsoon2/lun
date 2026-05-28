@@ -1,10 +1,10 @@
+![Lun multi-agent dashboard](./lun-image.png)
+
 ```
       ╦   ╦ ╦ ╔╗╔
       ║   ║ ║ ║║║
       ╩═╝ ╚═╝ ╝╚╝
 ```
-
-![Lun multi-agent dashboard](./lun-image.png)
 
 # One question. Multiple minds. Better decisions.
 
@@ -20,12 +20,12 @@
 
 **Lun (論)** is a CLI tool that asks multiple AI coding agents the same question in parallel and shows you their answers side-by-side — so you can spot consensus, catch blind spots, and make better design decisions.
 
-Currently supports **3 agents** (Kiro, Claude Code, GitHub Copilot) with more coming soon.
+Currently supports **Kiro, Claude Code, GitHub Copilot, Antigravity, and Codex**. Cline is also defined as an optional provider when its CLI is available.
 
 ```
 $ lun "Should I use REST or GraphQL for this API?"
 
-  Lun — Asking kiro, claude, copilot...
+  Lun — Asking kiro, claude, copilot, agy, codex...
 
   --- Kiro (4.2s, auto) ---
   REST is the better fit here. Your API is resource-oriented
@@ -125,12 +125,14 @@ lun -j "Should I use a monorepo?"
 Outputs NDJSON (one event per line, results stream as they arrive):
 
 ```jsonl
-{"event":"start","providers":["kiro","claude","copilot"]}
+{"event":"start","providers":["kiro","claude","copilot","agy","codex"]}
 {"event":"chunk","provider":"claude","delta":"I'd recommend..."}
 {"event":"result","provider":"claude","model":"sonnet","text":"...","elapsed":3.8,"error":false}
 {"event":"result","provider":"kiro","model":"auto","text":"...","elapsed":5.2,"error":false}
 {"event":"result","provider":"copilot","model":"auto","text":"...","elapsed":12.1,"error":false}
-{"event":"done","total":3,"errors":0}
+{"event":"result","provider":"agy","model":"auto","text":"...","elapsed":6.8,"error":false}
+{"event":"result","provider":"codex","model":"gpt-5.4","text":"...","elapsed":8.1,"error":false}
+{"event":"done","total":5,"errors":0}
 ```
 
 ### Tell your agent to use lun
@@ -156,14 +158,22 @@ lun [options] [prompt]
 
 Modes:
   lun                        Interactive (REPL)
+  lun chat                   PM-style Lun Agent conversation
   lun "prompt"               One-shot
   cat file | lun "review"    Pipe context
   lun serve                  Start web UI (localhost:3456)
+  lun daemon                 Start daemon dashboard in foreground
+  lun daemon start           Start daemon in background
+  lun daemon stop            Stop background daemon
+  lun daemon status          Show daemon status
 
 Options:
-  -P, --providers <list>     Agents to use (kiro,claude,copilot)
+  -P, --providers <list>     Agents to use (kiro,claude,copilot,agy,codex)
   -M, --models <list>        Models (claude:opus,copilot:gpt-4.1)
   -s, --summarize            Synthesize all answers
+  -d, --discuss              Autonomous discussion mode
+  --chat                     Use daemon PM chat mode for one-shot prompt
+  --ask                      Use daemon multi-agent ask mode
   -j, --json                 NDJSON streaming output
   -t, --timeout <sec>        Timeout (default: 120)
 
@@ -210,7 +220,7 @@ Custom port:
 LUN_PORT=8080 lun serve
 ```
 
-Features: real-time streaming, session history sidebar, per-agent model settings, smart routing with system messages.
+Features: real-time streaming, session history sidebar, per-agent model settings, smart routing with system messages, daemon usage stats, logs, and worker status.
 
 ---
 
@@ -218,17 +228,21 @@ Features: real-time streaming, session history sidebar, per-agent model settings
 
 Lun can also run inside VS Code and Copilot Chat.
 
-Install the bundled VSIX from this repository:
+Download and install the bundled VSIX from this repository:
+
+[Download `lun-0.2.2.vsix`](./extensions/vscode-lun/lun-0.2.2.vsix)
+
+Direct raw download:
 
 ```txt
-extensions/vscode-lun/lun-0.2.2.vsix
+https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.2.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select `extensions/vscode-lun/lun-0.2.2.vsix`.
+3. Select the downloaded `lun-0.2.2.vsix` file.
 4. Run `Developer: Reload Window`.
 
 The extension connects to the local daemon at `http://127.0.0.1:3456`. If the daemon is not running, it can start it automatically.
@@ -267,9 +281,19 @@ Stored at `~/.lun/config.json`:
 ```json
 {
   "language": "en",
-  "providers": ["kiro", "claude", "copilot"],
-  "models": { "kiro": "auto", "claude": "sonnet", "copilot": "auto" },
-  "timeout": 120
+  "providers": ["kiro", "claude", "copilot", "agy", "codex"],
+  "models": {
+    "kiro": "glm-5",
+    "claude": "opus",
+    "copilot": "claude-haiku-4.5",
+    "agy": "auto",
+    "codex": "gpt-5.4"
+  },
+  "pmAgent": "claude",
+  "pmModel": "sonnet",
+  "moderator": "copilot",
+  "timeout": 120,
+  "sessionsPath": "~/.lun/sessions"
 }
 ```
 

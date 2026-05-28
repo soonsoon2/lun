@@ -10,6 +10,12 @@ Install the bundled VSIX:
 extensions/vscode-lun/lun-0.2.2.vsix
 ```
 
+Direct raw download:
+
+```txt
+https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.2.vsix
+```
+
 In VS Code:
 
 1. Open Extensions.

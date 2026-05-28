@@ -17,7 +17,8 @@ export function printBanner() {
   |\x1b[0m  \x1b[1mLun\x1b[0m v${VERSION}                                \x1b[90m|
   |\x1b[0m  ${t("tagline").slice(0, 40).padEnd(40)}  \x1b[90m|
   |                                            |
-  |\x1b[0m  Agents: kiro · claude · copilot           \x1b[90m|
+  |\x1b[0m  Agents: kiro · claude · copilot · agy     \x1b[90m|
+  |\x1b[0m          codex                             \x1b[90m|
   |\x1b[0m  Docs:   lun --help                        \x1b[90m|
   |                                            |
   +--------------------------------------------+\x1b[0m

@@ -280,9 +280,10 @@ function cmdHelp() {
 
 function printInstallHelp() {
   console.log(`\n  \x1b[90m${t("install_help")}\x1b[0m`);
-  console.log(`    kiro:    https://kiro.dev/docs/cli`);
-  console.log(`    claude:  npm i -g @anthropic-ai/claude-code`);
-  console.log(`    copilot: gh extension install github/gh-copilot`);
+  for (const id of Object.keys(PROVIDERS).filter(id => !checkAvailable(id))) {
+    const def = PROVIDERS[id];
+    console.log(`    ${id.padEnd(8)} ${def.installHint || def.bin}`);
+  }
 }
 
 // ============================================================
