@@ -219,14 +219,14 @@ Lun can also run inside VS Code and Copilot Chat.
 Install the bundled VSIX from this repository:
 
 ```txt
-extensions/vscode-lun/lun-0.2.1.vsix
+extensions/vscode-lun/lun-0.2.2.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select `extensions/vscode-lun/lun-0.2.1.vsix`.
+3. Select `extensions/vscode-lun/lun-0.2.2.vsix`.
 4. Run `Developer: Reload Window`.
 
 The extension connects to the local daemon at `http://127.0.0.1:3456`. If the daemon is not running, it can start it automatically.

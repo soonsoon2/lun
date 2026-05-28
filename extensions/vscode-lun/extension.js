@@ -322,9 +322,9 @@ async function chatHandler(request, context, stream, token) {
       const message = event.data?.message || event.data?.stage || "Lun is working";
       const provider = event.data?.provider ? ` (${event.data.provider})` : "";
       const key = `${event.data?.stage || ""}:${message}`;
-      stream.progress(`${message}${provider}`);
       if (seenProgress.has(key)) return;
       seenProgress.add(key);
+      stream.progress(`${message}${provider}`);
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
       stream.markdown(`- ${elapsed}s: ${escapeMarkdown(message)}${provider}\n`);
     }, token);

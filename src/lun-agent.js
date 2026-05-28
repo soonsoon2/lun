@@ -153,15 +153,20 @@ export async function chatTurn(options) {
           const allResults = await Promise.all(
             availableAgents.filter(a => a !== pmAgent).map(async (a) => {
               try {
+                if (onToolCall) onToolCall(a, call.prompt);
                 const r = await runProvider(a, call.prompt, { model: models[a], timeout, cwd, onChunk: onToolChunk });
-                return { agent: a, text: r.text, elapsed: r.elapsed };
+                const result = { agent: a, text: r.text, elapsed: r.elapsed };
+                if (onToolResult) onToolResult(result.agent, result.text, result.elapsed);
+                return result;
               } catch (err) {
-                return { agent: a, text: `[Error] ${err.message}`, elapsed: 0, error: true };
+                const result = { agent: a, text: `[Error] ${err.message}`, elapsed: 0, error: true };
+                if (onToolResult) onToolResult(result.agent, result.text, result.elapsed);
+                return result;
               }
             })
           );
           const combined = allResults.map(r => `### ${r.agent}\n${r.text}`).join("\n\n");
-          return { agent: "all", text: combined, elapsed: 0 };
+          return { agent: "all", text: combined, elapsed: Math.max(0, ...allResults.map(r => r.elapsed || 0)), synthetic: true };
         }
 
         // Single agent call
@@ -180,7 +185,9 @@ export async function chatTurn(options) {
       }
     }));
 
-    if (onToolResult) for (const r of newResults) onToolResult(r.agent, r.text, r.elapsed);
+    if (onToolResult) for (const r of newResults) {
+      if (!r.synthetic) onToolResult(r.agent, r.text, r.elapsed);
+    }
     toolResults.push(...newResults);
   }
 

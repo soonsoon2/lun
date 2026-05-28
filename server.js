@@ -424,15 +424,18 @@ app.post("/api/query/stream", async (req, reply) => {
     const pmAgent = config.pmAgent || "claude";
     const pmModel = config.pmModel || config.models?.[pmAgent];
     const history = apiChatHistories.get(sessionId) || [];
-    let lastChunkAt = 0;
+    const lastProgressAt = new Map();
 
-    send("progress", {
-      requestId,
-      stage: "pm_start",
-      provider: pmAgent,
-      model: pmModel || "auto",
-      message: `${pmAgent} PM is planning the request`,
-    });
+    const sendProgress = (stage, provider, message, data = {}, minIntervalMs = 0) => {
+      const key = `${stage}:${provider || ""}:${message}`;
+      const now = Date.now();
+      const last = lastProgressAt.get(key) || 0;
+      if (minIntervalMs && now - last < minIntervalMs) return;
+      lastProgressAt.set(key, now);
+      send("progress", { requestId, stage, provider, message, ...data });
+    };
+
+    sendProgress("pm_start", pmAgent, `${pmAgent} PM is planning the request`, { model: pmModel || "auto" });
 
     const result = await chatTurn({
       pmAgent,
@@ -444,44 +447,16 @@ app.post("/api/query/stream", async (req, reply) => {
       cwd,
       timeout,
       onPMThinking: (round) => {
-        send("progress", {
-          requestId,
-          stage: "pm_thinking",
-          provider: pmAgent,
-          round: round + 1,
-          message: `${pmAgent} PM thinking, round ${round + 1}`,
-        });
+        sendProgress("pm_thinking", pmAgent, `${pmAgent} PM thinking, round ${round + 1}`, { round: round + 1 });
       },
       onPMChunk: (provider, chunk) => {
-        const now = Date.now();
-        if (now - lastChunkAt < 1500) return;
-        lastChunkAt = now;
-        send("progress", {
-          requestId,
-          stage: "pm_streaming",
-          provider,
-          message: `${provider} is drafting or routing`,
-        });
+        sendProgress("pm_streaming", provider, `${provider} is drafting or routing`, { chunkChars: chunk?.length || 0 }, 12000);
       },
       onToolCall: (agent, prompt) => {
-        send("progress", {
-          requestId,
-          stage: "tool_call",
-          provider: agent,
-          inputChars: prompt.length,
-          message: agent === "all" ? "Calling all available specialist agents" : `Calling ${agent}`,
-        });
+        sendProgress("tool_call", agent, agent === "all" ? "Calling all available specialist agents" : `Calling ${agent}`, { inputChars: prompt.length });
       },
       onToolChunk: (provider) => {
-        const now = Date.now();
-        if (now - lastChunkAt < 1500) return;
-        lastChunkAt = now;
-        send("progress", {
-          requestId,
-          stage: "tool_streaming",
-          provider,
-          message: `${provider} is responding`,
-        });
+        sendProgress("tool_streaming", provider, `${provider} is responding`, {}, 12000);
       },
       onToolResult: (agent, output, elapsed) => {
         recordProviderRun({

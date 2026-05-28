@@ -7,14 +7,14 @@ Use the local Lun daemon directly inside VS Code.
 Install the bundled VSIX:
 
 ```txt
-extensions/vscode-lun/lun-0.2.1.vsix
+extensions/vscode-lun/lun-0.2.2.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select `lun-0.2.1.vsix`.
+3. Select `lun-0.2.2.vsix`.
 4. Run `Developer: Reload Window`.
 
 The extension talks to `http://127.0.0.1:3456` by default. If the daemon is not running and `lun.autoStartDaemon` is enabled, it starts it automatically.
