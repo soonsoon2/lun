@@ -21,6 +21,7 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand("lun.askSelection", askSelection));
   context.subscriptions.push(vscode.commands.registerCommand("lun.reviewCurrentFile", reviewCurrentFile));
   context.subscriptions.push(vscode.commands.registerCommand("lun.explainDiagnostics", explainDiagnostics));
+  context.subscriptions.push(vscode.commands.registerCommand("lun.openReport", openReport));
   context.subscriptions.push(vscode.commands.registerCommand("lun.startDaemon", startDaemonCommand));
   context.subscriptions.push(vscode.commands.registerCommand("lun.stopDaemon", stopDaemonCommand));
   context.subscriptions.push(vscode.commands.registerCommand("lun.showStatus", showStatusCommand));
@@ -377,28 +378,22 @@ function formatLunMarkdown(result) {
     return `## Summary\n\n### ${provider}${model}${elapsed}\n\n${item.text || "(no response)"}`;
   }).join("\n\n---\n\n");
 
-  const full = collectToolOutputs(result.toolCalls || []);
-  if (!full.length) return summary;
-
-  const details = full.map(item => {
-    const elapsed = item.elapsed ? `, ${item.elapsed}s` : "";
-    const model = item.model ? `, ${item.model}` : "";
-    return `### ${item.agent || "agent"}${model}${elapsed}\n\n${item.text || "(no response)"}`;
-  }).join("\n\n---\n\n");
-
-  return `${summary}\n\n---\n\n## Full Agent Opinions\n\n${details}`;
+  if (!result.report?.path) return summary;
+  const args = encodeURIComponent(JSON.stringify([result.report.path]));
+  return `${summary}\n\n[Open full agent report](${`command:lun.openReport?${args}`})`;
 }
 
-function collectToolOutputs(toolCalls) {
-  const output = [];
-  for (const call of toolCalls || []) {
-    if (Array.isArray(call.children) && call.children.length) {
-      for (const child of call.children) output.push(child);
-      continue;
-    }
-    if (call.agent && call.agent !== "all") output.push(call);
+async function openReport(reportPath) {
+  if (!reportPath || typeof reportPath !== "string") {
+    vscode.window.showWarningMessage("No Lun report path was provided.");
+    return;
   }
-  return output;
+  try {
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(reportPath));
+    await vscode.window.showTextDocument(doc, { preview: false });
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to open Lun report: ${err.message}`);
+  }
 }
 
 async function streamDaemonStatus(stream) {
@@ -581,6 +576,8 @@ async function handlePanelMessage(message) {
     } else if (message.type === "stop") {
       await stopDaemonCommand();
       postPanel({ type: "notice", text: "Daemon stopped." });
+    } else if (message.type === "openReport") {
+      await openReport(message.path);
     }
   } catch (err) {
     postPanel({ type: "error", text: err.message });
@@ -667,21 +664,11 @@ function panelHtml(webview) {
     });
     function renderResult(result){
       const summary = (result.results || []).map(r => "<h3>Summary · " + esc(r.provider) + " · " + esc(String(r.elapsed || 0)) + "s</h3><pre>" + esc(r.text || "") + "</pre>").join("");
-      const full = collectToolOutputs(result.toolCalls || []);
-      const fullHtml = full.length ? "<h3>Full Agent Opinions</h3>" + full.map(r => "<h4>" + esc(r.agent || "agent") + " · " + esc(r.model || "auto") + " · " + esc(String(r.elapsed || 0)) + "s</h4><pre>" + esc(r.text || "") + "</pre>").join("") : "";
-      $("results").innerHTML = summary + fullHtml;
+      const report = result.report?.path ? "<p><button id='open-report' class='secondary'>Open full agent report</button></p>" : "";
+      $("results").innerHTML = summary + report;
+      const reportButton = $("open-report");
+      if (reportButton) reportButton.onclick = () => vscode.postMessage({type:"openReport", path: result.report.path});
       vscode.postMessage({type:"refresh"});
-    }
-    function collectToolOutputs(toolCalls){
-      const output = [];
-      for (const call of toolCalls || []) {
-        if (Array.isArray(call.children) && call.children.length) {
-          for (const child of call.children) output.push(child);
-        } else if (call.agent && call.agent !== "all") {
-          output.push(call);
-        }
-      }
-      return output;
     }
     function renderState(msg){
       $("workers").innerHTML = table(["provider","model","alive","ready","busy","queued","runs"], (msg.workers.workers || []).map(w => [w.provider,w.model || w.note || "",w.alive,w.ready,w.busy,w.queued ?? "",w.runs ?? ""]));

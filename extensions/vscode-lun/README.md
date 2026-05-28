@@ -7,20 +7,20 @@ Use the local Lun daemon directly inside VS Code.
 Install the bundled VSIX:
 
 ```txt
-extensions/vscode-lun/lun-0.2.3.vsix
+extensions/vscode-lun/lun-0.2.4.vsix
 ```
 
 Direct raw download:
 
 ```txt
-https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.3.vsix
+https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.4.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select `lun-0.2.3.vsix`.
+3. Select `lun-0.2.4.vsix`.
 4. Run `Developer: Reload Window`.
 
 The extension talks to `http://127.0.0.1:3456` by default. If the daemon is not running and `lun.autoStartDaemon` is enabled, it starts it automatically.
@@ -69,7 +69,7 @@ Chat requests stream visible progress updates before the final response:
 15.2s: agy finished in 6.8s
 ```
 
-When Lun delegates to other agents, responses include a summary first and a `Full Agent Opinions` section with each model's full output.
+When Lun delegates to other agents, responses show the PM summary first and save each model's full output to a Markdown report you can open on demand.
 
 ## Settings
 

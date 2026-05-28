@@ -6,8 +6,10 @@ export const LUN_DIR = join(HOME, ".lun");
 export const USAGE_LOG_PATH = join(LUN_DIR, "usage.ndjson");
 export const DAEMON_LOG_PATH = join(LUN_DIR, "daemon.log");
 export const DAEMON_STATE_PATH = join(LUN_DIR, "daemon.json");
+export const REPORTS_DIR = join(LUN_DIR, "reports");
 
 mkdirSync(LUN_DIR, { recursive: true });
+mkdirSync(REPORTS_DIR, { recursive: true });
 
 function appendNdjson(path, event) {
   appendFileSync(path, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");

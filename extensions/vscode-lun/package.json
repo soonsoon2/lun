@@ -2,7 +2,7 @@
   "name": "vscode-lun",
   "displayName": "Lun",
   "description": "Use the Lun daemon from VS Code: ask agents about selections, files, workers, and usage.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "soonsoon",
   "engines": {
     "vscode": "^1.85.0"
@@ -16,6 +16,7 @@
     "onCommand:lun.askSelection",
     "onCommand:lun.reviewCurrentFile",
     "onCommand:lun.explainDiagnostics",
+    "onCommand:lun.openReport",
     "onCommand:lun.startDaemon",
     "onCommand:lun.stopDaemon",
     "onCommand:lun.showStatus"
@@ -69,6 +70,10 @@
       {
         "command": "lun.explainDiagnostics",
         "title": "Lun: Explain Diagnostics"
+      },
+      {
+        "command": "lun.openReport",
+        "title": "Lun: Open Full Report"
       },
       {
         "command": "lun.startDaemon",

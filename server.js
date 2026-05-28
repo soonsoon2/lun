@@ -16,6 +16,7 @@ import { loadConfig, defaultConfig, getSessionsDir } from "./src/config.js";
 import {
   DAEMON_LOG_PATH,
   DAEMON_STATE_PATH,
+  REPORTS_DIR,
   USAGE_LOG_PATH,
   appendDaemonLog,
   appendUsageEvent,
@@ -262,6 +263,52 @@ function writeSse(raw, event, data = {}) {
   raw.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+function collectToolOutputs(toolCalls = []) {
+  const output = [];
+  for (const call of toolCalls || []) {
+    if (Array.isArray(call.children) && call.children.length) {
+      for (const child of call.children) output.push(child);
+    } else if (call.agent && call.agent !== "all") {
+      output.push(call);
+    }
+  }
+  return output;
+}
+
+function writeFullReport({ requestId, sessionId, userMessage, summary, toolCalls = [] }) {
+  const full = collectToolOutputs(toolCalls);
+  if (!full.length) return null;
+
+  mkdirSync(REPORTS_DIR, { recursive: true });
+  const safeId = String(requestId || randomUUID()).replace(/[^a-zA-Z0-9._-]/g, "-");
+  const path = join(REPORTS_DIR, `${safeId}.md`);
+  const parts = [
+    "# Lun Full Agent Report",
+    "",
+    `- Request: ${requestId}`,
+    `- Session: ${sessionId}`,
+    `- Created: ${new Date().toISOString()}`,
+    "",
+    "## User Request",
+    "",
+    userMessage || "",
+    "",
+    "## Summary",
+    "",
+    summary || "",
+    "",
+    "## Full Agent Opinions",
+  ];
+
+  for (const item of full) {
+    const title = [item.agent || "agent", item.model || "auto", item.elapsed ? `${item.elapsed}s` : ""].filter(Boolean).join(" · ");
+    parts.push("", `### ${title}`, "", item.text || "(no response)");
+  }
+
+  writeFileSync(path, parts.join("\n"));
+  return { path, count: full.length };
+}
+
 // ============================================================
 // API: GET /api/providers
 // ============================================================
@@ -494,6 +541,13 @@ app.post("/api/query/stream", async (req, reply) => {
     history.push({ user: text, assistant: result.response });
     while (history.length > 10) history.shift();
     apiChatHistories.set(sessionId, history);
+    const report = writeFullReport({
+      requestId,
+      sessionId,
+      userMessage: text,
+      summary: result.response,
+      toolCalls: result.toolCalls,
+    });
 
     send("done", {
       ok: true,
@@ -502,6 +556,7 @@ app.post("/api/query/stream", async (req, reply) => {
       mode,
       results: [{ provider: pmAgent, model: pmModel || "auto", text: result.response, elapsed: result.elapsed }],
       toolCalls: result.toolCalls,
+      report,
     });
     raw.end();
   } catch (err) {
@@ -587,7 +642,14 @@ app.post("/api/query", async (req, reply) => {
       history.push({ user: text, assistant: result.response });
       while (history.length > 10) history.shift();
       apiChatHistories.set(sessionId, history);
-      return { ok: true, requestId, sessionId, mode, results: [{ provider: pmAgent, model: pmModel || "auto", text: result.response, elapsed: result.elapsed }], toolCalls: result.toolCalls };
+      const report = writeFullReport({
+        requestId,
+        sessionId,
+        userMessage: text,
+        summary: result.response,
+        toolCalls: result.toolCalls,
+      });
+      return { ok: true, requestId, sessionId, mode, results: [{ provider: pmAgent, model: pmModel || "auto", text: result.response, elapsed: result.elapsed }], toolCalls: result.toolCalls, report };
     }
 
     if (mode === "single" && body.provider) {
