@@ -16,7 +16,7 @@ import { Codex } from "@openai/codex-sdk";
 
 // One Codex client per process; threads are keyed by caller-provided sessionKey.
 const codex = new Codex();
-const threads = new Map(); // sessionKey → { thread, model, cwd }
+const threads = new Map(); // sessionKey → { thread, model, cwd, runs, lastUsedAt }
 
 function getOrCreateThread(sessionKey, opts) {
   const existing = threads.get(sessionKey);
@@ -31,7 +31,7 @@ function getOrCreateThread(sessionKey, opts) {
     approvalPolicy: "never",
     model: opts.model,
   });
-  threads.set(sessionKey, { thread, model: opts.model, cwd: opts.cwd });
+  threads.set(sessionKey, { thread, model: opts.model, cwd: opts.cwd, runs: 0, lastUsedAt: null });
   return thread;
 }
 
@@ -70,6 +70,11 @@ export async function runCodexSDK(prompt, options = {}) {
         }
       }
       clearTimeout(timer);
+      const state = threads.get(sessionKey);
+      if (state) {
+        state.runs += 1;
+        state.lastUsedAt = Date.now();
+      }
       return {
         text: finalText.trim(),
         elapsed: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
@@ -82,6 +87,11 @@ export async function runCodexSDK(prompt, options = {}) {
     // Buffered path
     const turn = await thread.run(prompt, { signal: controller.signal });
     clearTimeout(timer);
+    const state = threads.get(sessionKey);
+    if (state) {
+      state.runs += 1;
+      state.lastUsedAt = Date.now();
+    }
     return {
       text: (turn.finalResponse || "").trim(),
       elapsed: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
@@ -100,6 +110,51 @@ export async function runCodexSDK(prompt, options = {}) {
 
 export function resetCodexThread(sessionKey = "default") {
   threads.delete(sessionKey);
+}
+
+export function getCodexSDKStatuses() {
+  if (!threads.size) {
+    return [{
+      provider: "codex",
+      alive: true,
+      ready: true,
+      persistent: true,
+      protocol: "codex-sdk",
+      queued: 0,
+      busy: false,
+      runs: 0,
+      lastError: null,
+      note: "managed by Codex SDK thread cache; first thread starts on first request",
+    }];
+  }
+
+  return [...threads.entries()].map(([sessionKey, state]) => ({
+    provider: "codex",
+    model: state.model,
+    cwd: state.cwd,
+    alive: true,
+    ready: true,
+    persistent: true,
+    protocol: "codex-sdk",
+    sessionId: state.thread?.id || sessionKey,
+    sessionKey,
+    queued: 0,
+    busy: false,
+    runs: state.runs,
+    lastError: null,
+    lastUsedAt: state.lastUsedAt,
+    note: "persistent Codex SDK thread cache",
+  }));
+}
+
+export function prewarmCodexSDK(options = {}) {
+  const {
+    sessionKey = "default",
+    model,
+    cwd = process.env.HOME,
+  } = options;
+  getOrCreateThread(sessionKey, { model, cwd });
+  return getCodexSDKStatuses().find(status => status.sessionKey === sessionKey) || null;
 }
 
 export function shutdownCodexSDK() {

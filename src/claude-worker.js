@@ -173,11 +173,14 @@ class ClaudeWorker {
       cwd: this.cwd,
       alive: !!this.child && !this.child.killed,
       ready: this.ready,
+      persistent: true,
+      protocol: "stream-json",
       sessionId: this.sessionId,
       queued: this.queue.length,
       busy: !!this.active,
       runs: this.runs,
       lastError: this.lastError,
+      note: "persistent Claude stream-json worker; process stays warm and prompts are written to stdin",
     };
   }
 }
@@ -194,6 +197,17 @@ export function runClaudeWorker(prompt, options = {}) {
     workers.set(key, worker);
   }
   return worker.run(prompt, options);
+}
+
+export function startClaudeWorker(options = {}) {
+  const key = keyFor(options);
+  let worker = workers.get(key);
+  if (!worker) {
+    worker = new ClaudeWorker({ model: options.model, cwd: options.cwd });
+    workers.set(key, worker);
+  }
+  worker.start();
+  return worker.status();
 }
 
 export function getClaudeWorkerStatuses() {

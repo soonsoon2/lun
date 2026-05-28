@@ -222,6 +222,20 @@ LUN_PORT=8080 lun serve
 
 Features: real-time streaming, session history sidebar, per-agent model settings, smart routing with system messages, daemon usage stats, logs, and worker status.
 
+### Daemon worker model
+
+`lun daemon start` keeps the dashboard API and warm agent workers running in the background. By default, persistent workers are prewarmed for the workspace where the daemon starts; requests from a different workspace create that workspace's worker on first use. Worker status is visible in the web UI, VS Code panel, or with `@lun /workers`.
+
+| Agent | Daemon strategy | Notes |
+|-------|-----------------|-------|
+| Kiro | Persistent ACP worker | `kiro-cli acp` stays alive and reuses one session per model/workspace. |
+| GitHub Copilot | Persistent ACP worker | `copilot --acp --stdio` stays alive and reuses one session per model/workspace. |
+| Claude Code | Persistent stream-json worker | `claude` stays alive and receives prompts over stdin. |
+| Codex | Persistent SDK thread cache | Uses `@openai/codex-sdk` threads instead of spawning `codex exec` each turn. |
+| Antigravity | Queued spawn-per-turn worker | `agy` currently has no stable ACP/stdio daemon protocol exposed, so Lun keeps queueing/usage/logging but still invokes print mode per request. |
+
+The daemon removes process startup and session wiring overhead where the agent exposes a machine protocol. Model thinking time, tool use, network latency, and project file reading still remain the real floor.
+
 ---
 
 ## VS Code Extension
@@ -230,19 +244,19 @@ Lun can also run inside VS Code and Copilot Chat.
 
 Download and install the bundled VSIX from this repository:
 
-[Download `lun-0.2.4.vsix`](./extensions/vscode-lun/lun-0.2.4.vsix)
+[Download `lun-0.2.5.vsix`](./extensions/vscode-lun/lun-0.2.5.vsix)
 
 Direct raw download:
 
 ```txt
-https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.4.vsix
+https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.5.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select the downloaded `lun-0.2.4.vsix` file.
+3. Select the downloaded `lun-0.2.5.vsix` file.
 4. Run `Developer: Reload Window`.
 
 The extension connects to the local daemon at `http://127.0.0.1:3456`. If the daemon is not running, it can start it automatically.
@@ -304,6 +318,8 @@ Stored at `~/.lun/config.json`:
 |----------|---------|-------------|
 | `LUN_PORT` | `3456` | Web UI port |
 | `LUN_HOST` | `127.0.0.1` | Web UI bind address |
+| `LUN_PREWARM_WORKERS` | `1` | Set to `0` to skip daemon worker prewarm on startup |
+| `LUN_DISABLE_ACP_WORKER` | unset | Set to `1` to force Kiro/Copilot back to spawn-per-turn mode |
 | `PORT` | `3456` | Alternative port variable |
 
 ---

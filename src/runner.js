@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
 import { runCodexSDK } from "./codex-sdk-runner.js";
 import { runClaudeWorker } from "./claude-worker.js";
+import { runAcpWorker, supportsAcpWorker } from "./acp-worker.js";
 import { runManagedAgentWorker } from "./agent-workers.js";
 
 // ============================================================
@@ -83,6 +84,15 @@ export function runProvider(providerId, prompt, options = {}) {
 
   if (providerId === "claude" && process.env.LUN_DAEMON === "1" && process.env.LUN_DISABLE_CLAUDE_WORKER !== "1") {
     return runClaudeWorker(prompt, {
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
+
+  if (supportsAcpWorker(providerId) && process.env.LUN_DAEMON === "1" && process.env.LUN_DISABLE_ACP_WORKER !== "1") {
+    return runAcpWorker(providerId, prompt, {
       model: model || providerDef.defaultModel,
       cwd: cwd || process.env.HOME,
       timeout,

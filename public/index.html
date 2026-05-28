@@ -421,7 +421,7 @@ async function renderWorkers(){
     const d=await r.json();
     const workers=d.workers||[];
     chatInner.innerHTML=`<div class="dash">
-      ${workers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>model</th><th>alive</th><th>ready</th><th>busy</th><th>queued</th><th>runs</th><th>session</th></tr></thead><tbody>${workers.map(w=>`<tr><td>${esc(w.provider||"")}</td><td>${esc(w.model||w.note||"")}</td><td>${w.alive?"yes":"no"}</td><td>${w.ready?"yes":"no"}</td><td>${w.busy?"yes":"no"}</td><td>${w.queued??""}</td><td>${w.runs??""}</td><td>${esc((w.sessionId||"").slice(0,12))}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no workers yet</div>`}
+      ${workers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>model</th><th>protocol</th><th>persistent</th><th>alive</th><th>ready</th><th>busy</th><th>queued</th><th>runs</th><th>session</th></tr></thead><tbody>${workers.map(w=>`<tr><td>${esc(w.provider||"")}</td><td>${esc(w.model||"")}</td><td>${esc(w.protocol||"")}</td><td>${w.persistent?"yes":"no"}</td><td>${w.alive?"yes":"no"}</td><td>${w.ready?"yes":"no"}</td><td>${w.busy?"yes":"no"}</td><td>${w.queued??""}</td><td>${w.runs??""}</td><td>${esc((w.sessionId||"").slice(0,12))}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no workers yet</div>`}
     </div>`;
   }catch(e){
     chatInner.innerHTML=`<div class="dash-empty">workers unavailable</div>`;

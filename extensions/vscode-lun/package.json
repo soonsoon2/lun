@@ -2,7 +2,7 @@
   "name": "vscode-lun",
   "displayName": "Lun",
   "description": "Use the Lun daemon from VS Code: ask agents about selections, files, workers, and usage.",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "soonsoon",
   "engines": {
     "vscode": "^1.85.0"

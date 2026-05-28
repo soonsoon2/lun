@@ -144,7 +144,7 @@ export function planRoute(prompt, availableProviders, options = {}) {
  *   - onRoute: (plan) => void  — called when routing is decided
  */
 export async function moderatedQuery(prompt, availableProviders, options = {}) {
-  const { models = {}, timeout = 120000, onResult, onChunk, onRoute } = options;
+  const { models = {}, timeout = 120000, cwd, onResult, onChunk, onRoute } = options;
 
   // 1. Plan route
   const plan = planRoute(prompt, availableProviders);
@@ -156,6 +156,7 @@ export async function moderatedQuery(prompt, availableProviders, options = {}) {
     try {
       const r = await runProvider(pid, prompt, {
         model: models[pid],
+        cwd,
         timeout,
         onChunk: onChunk ? (provider, delta) => onChunk(provider, delta) : undefined,
       });

@@ -674,6 +674,7 @@ async function interactiveMode(activeProviders, activeModels, activeTimeout) {
     // Run moderated query
     const { intent, reason, skippedNote, results } = await moderatedQuery(trimmed, activeProviders, {
       models: activeModels,
+      cwd: process.cwd(),
       timeout: activeTimeout,
       onRoute: (plan) => {
         if (plan.strategy !== "all") {
@@ -836,6 +837,7 @@ async function main() {
     // NDJSON streaming with moderator routing
     const { intent, strategy, reason, skippedNote, results } = await moderatedQuery(fullPrompt, activeProviders, {
       models: activeModels,
+      cwd: process.cwd(),
       timeout: activeTimeout,
       onRoute: (plan) => {
         console.log(JSON.stringify({ event: "start", intent: plan.intent, strategy: plan.strategy, providers: plan.providers, models: activeModels, timestamp: new Date().toISOString() }));
@@ -861,6 +863,7 @@ async function main() {
 
     const { intent, strategy, reason, skippedNote, results } = await moderatedQuery(fullPrompt, activeProviders, {
       models: activeModels,
+      cwd: process.cwd(),
       timeout: activeTimeout,
       onRoute: (plan) => {
         if (plan.strategy !== "all") {

@@ -163,15 +163,16 @@ class ManagedAgentWorker {
       provider: this.provider,
       model: this.model,
       cwd: this.cwd,
-      alive: true,
+      alive: !!this.child && !this.child.killed,
       ready: true,
       persistent: false,
+      protocol: "spawn-per-turn",
       sessionId: this.sessionId,
       queued: this.queue.length,
       busy: !!this.active,
       runs: this.runs,
       lastError: this.lastError,
-      note: "queued daemon worker; process is spawned per turn because this CLI has no stable stream protocol wired yet",
+      note: "queued daemon worker; process is spawned per turn because this CLI has no stable stream protocol available",
     };
   }
 }

@@ -412,13 +412,13 @@ async function streamWorkers(stream) {
   await ensureDaemon();
   const data = await requestJson("GET", "/api/workers");
   const rows = (data.workers || []).map(w => (
-    `| ${w.provider || ""} | ${w.model || w.note || ""} | ${w.ready ? "ready" : "not ready"} | ${w.busy ? "busy" : "idle"} | ${w.queued ?? ""} |`
+    `| ${w.provider || ""} | ${w.model || ""} | ${w.protocol || ""} | ${w.persistent ? "yes" : "no"} | ${w.alive ? "alive" : "cold"} | ${w.ready ? "ready" : "not ready"} | ${w.busy ? "busy" : "idle"} | ${w.queued ?? ""} | ${w.runs ?? ""} |`
   ));
   stream.markdown([
     "### Lun workers",
     "",
-    "| Provider | Model | Ready | Busy | Queue |",
-    "| --- | --- | --- | --- | --- |",
+    "| Provider | Model | Protocol | Persistent | Alive | Ready | Busy | Queue | Runs |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...rows,
   ].join("\n"));
 }
@@ -671,7 +671,7 @@ function panelHtml(webview) {
       vscode.postMessage({type:"refresh"});
     }
     function renderState(msg){
-      $("workers").innerHTML = table(["provider","model","alive","ready","busy","queued","runs"], (msg.workers.workers || []).map(w => [w.provider,w.model || w.note || "",w.alive,w.ready,w.busy,w.queued ?? "",w.runs ?? ""]));
+      $("workers").innerHTML = table(["provider","model","protocol","persistent","alive","ready","busy","queued","runs"], (msg.workers.workers || []).map(w => [w.provider,w.model || "",w.protocol || "",w.persistent ? "yes" : "no",w.alive,w.ready,w.busy,w.queued ?? "",w.runs ?? ""]));
       const providers = msg.usage.providers || [];
       $("usage").innerHTML = "<p class='muted'>Runs: " + msg.usage.totals.runs + " · Avg: " + fmt(msg.usage.totals.avgLatencyMs) + "</p>" + table(["provider","count","ok","err","avg"], providers.map(p => [p.provider,p.count,p.ok,p.errors,fmt(p.avgLatencyMs)]));
       $("logs").innerHTML = (msg.logs.logs || []).slice().reverse().map(l => "<pre>" + esc(l.ts + " " + l.message + " " + JSON.stringify(l)) + "</pre>").join("");

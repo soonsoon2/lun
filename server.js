@@ -25,8 +25,10 @@ import {
   summarizeUsage,
   writeDaemonState,
 } from "./src/daemon-store.js";
-import { getClaudeWorkerStatuses, shutdownClaudeWorkers } from "./src/claude-worker.js";
+import { getClaudeWorkerStatuses, shutdownClaudeWorkers, startClaudeWorker } from "./src/claude-worker.js";
+import { getAcpWorkerStatuses, shutdownAcpWorkers, startAcpWorker, supportsAcpWorker } from "./src/acp-worker.js";
 import { getManagedAgentWorkerStatuses, shutdownManagedAgentWorkers } from "./src/agent-workers.js";
+import { getCodexSDKStatuses, prewarmCodexSDK, shutdownCodexSDK } from "./src/codex-sdk-runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
@@ -79,6 +81,31 @@ function isSafeDate(value) {
 
 function isSafeThreadId(value) {
   return /^[a-zA-Z0-9._-]+$/.test(value || "");
+}
+
+async function prewarmPersistentWorkers() {
+  if (!IS_DAEMON || process.env.LUN_PREWARM_WORKERS === "0") return;
+  const config = loadConfig() || defaultConfig();
+  const cwd = normalizeCwd(config.defaultCwd || process.cwd());
+  const providers = (config.providers || Object.keys(PROVIDERS)).filter(provider => PROVIDERS[provider] && checkAvailable(provider));
+
+  for (const provider of providers) {
+    const model = config.models?.[provider] || PROVIDERS[provider]?.defaultModel;
+    try {
+      if (supportsAcpWorker(provider)) {
+        await startAcpWorker(provider, { model, cwd });
+        appendDaemonLog("worker prewarmed", { provider, model, protocol: "acp" });
+      } else if (provider === "claude") {
+        startClaudeWorker({ model, cwd });
+        appendDaemonLog("worker prewarmed", { provider, model, protocol: "stream-json" });
+      } else if (provider === "codex") {
+        prewarmCodexSDK({ sessionKey: "default", model, cwd });
+        appendDaemonLog("worker prewarmed", { provider, model, protocol: "codex-sdk" });
+      }
+    } catch (err) {
+      appendDaemonLog("worker prewarm failed", { provider, model, error: err.message });
+    }
+  }
 }
 
 function threadPath(date, id) {
@@ -346,27 +373,40 @@ app.get("/api/workers", async () => {
   const configuredProviders = config.providers || Object.keys(PROVIDERS);
   const activeWorkers = [
     ...getClaudeWorkerStatuses(),
+    ...getAcpWorkerStatuses(),
     ...getManagedAgentWorkerStatuses(),
-    { provider: "codex", alive: true, ready: true, note: "managed by Codex SDK thread cache" },
-  ];
-  const byProvider = new Map(activeWorkers.map(worker => [worker.provider, worker]));
-
-  return {
-    workers: configuredProviders
-      .filter(provider => PROVIDERS[provider])
-      .map(provider => byProvider.get(provider) || {
+    ...getCodexSDKStatuses(),
+  ].filter(worker => configuredProviders.includes(worker.provider));
+  const activeProviders = new Set(activeWorkers.map(worker => worker.provider));
+  const fallbackWorkers = configuredProviders
+    .filter(provider => PROVIDERS[provider] && !activeProviders.has(provider))
+    .map(provider => {
+      const persistent = provider === "codex" || provider === "claude" || supportsAcpWorker(provider);
+      const protocol = provider === "codex"
+        ? "codex-sdk"
+        : provider === "claude"
+          ? "stream-json"
+          : supportsAcpWorker(provider)
+            ? "acp"
+            : "spawn-per-turn";
+      return {
         provider,
         model: config.models?.[provider] || PROVIDERS[provider]?.defaultModel || "auto",
         alive: false,
         ready: checkAvailable(provider),
-        persistent: provider === "codex",
+        persistent,
+        protocol,
         sessionId: null,
         queued: 0,
         busy: false,
         runs: 0,
         lastError: null,
         note: checkAvailable(provider) ? "configured; worker starts on first request" : "configured but executable is unavailable",
-      }),
+      };
+    });
+
+  return {
+    workers: [...activeWorkers, ...fallbackWorkers],
   };
 });
 
@@ -440,6 +480,7 @@ app.post("/api/query/stream", async (req, reply) => {
       send("progress", { requestId, stage: "fallback", message: `${mode} mode is running without detailed PM progress` });
       const routed = await moderatedQuery(text, availableProviders, {
         models: config.models || {},
+        cwd,
         timeout,
         onResult: (r) => {
           recordProviderRun({
@@ -680,6 +721,7 @@ app.post("/api/query", async (req, reply) => {
 
     const routed = await moderatedQuery(text, availableProviders, {
       models: config.models || {},
+      cwd,
       timeout: Number(body.timeoutMs || 180000),
       onResult: (r) => {
         recordProviderRun({
@@ -1093,6 +1135,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             const cfg = loadConfig() || defaultConfig();
             moderatedQuery(text, availableProviders, {
               models: cfg.models || {},
+              cwd: sessionOptions.cwd,
               timeout: 180000,
               onRoute: (plan) => {
                 for (const pid of plan.providers) {
@@ -1383,15 +1426,22 @@ console.log(`
 
 writeDaemonState({ pid: process.pid, host: HOST, port: actualPort, url: `http://${HOST}:${actualPort}`, daemon: IS_DAEMON });
 appendDaemonLog(`${IS_DAEMON ? "daemon" : "server"} started`, { pid: process.pid, host: HOST, port: actualPort });
+prewarmPersistentWorkers().catch(err => {
+  appendDaemonLog("worker prewarm failed", { error: err.message });
+});
 
 process.on("SIGTERM", () => {
   shutdownClaudeWorkers();
+  shutdownAcpWorkers();
   shutdownManagedAgentWorkers();
+  shutdownCodexSDK();
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
   shutdownClaudeWorkers();
+  shutdownAcpWorkers();
   shutdownManagedAgentWorkers();
+  shutdownCodexSDK();
   process.exit(0);
 });

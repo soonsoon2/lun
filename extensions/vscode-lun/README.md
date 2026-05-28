@@ -7,20 +7,20 @@ Use the local Lun daemon directly inside VS Code.
 Install the bundled VSIX:
 
 ```txt
-extensions/vscode-lun/lun-0.2.4.vsix
+extensions/vscode-lun/lun-0.2.5.vsix
 ```
 
 Direct raw download:
 
 ```txt
-https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.4.vsix
+https://github.com/soonsoon2/lun/raw/main/extensions/vscode-lun/lun-0.2.5.vsix
 ```
 
 In VS Code:
 
 1. Open Extensions.
 2. Choose `Install from VSIX...`.
-3. Select `lun-0.2.4.vsix`.
+3. Select `lun-0.2.5.vsix`.
 4. Run `Developer: Reload Window`.
 
 The extension talks to `http://127.0.0.1:3456` by default. If the daemon is not running and `lun.autoStartDaemon` is enabled, it starts it automatically.
@@ -57,6 +57,8 @@ When VS Code Chat or Copilot Chat is available, Lun registers as `@lun`.
 ```
 
 The dashboard remains available through `Lun: Open Panel`; chat requests are routed through the local daemon.
+
+The daemon keeps supported agents warm in the active workspace: Kiro and Copilot use persistent ACP sessions, Claude uses a persistent stream-json worker, and Codex uses the SDK thread cache. Antigravity is still queued through the daemon but runs `agy` print mode per request because no stable persistent protocol is exposed by the CLI yet.
 
 Chat requests stream visible progress updates before the final response:
 
