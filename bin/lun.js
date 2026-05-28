@@ -480,7 +480,59 @@ async function queryDaemon(payload) {
   }
 }
 
-function printDaemonResults(result, activeModels, asJson) {
+async function queryDaemonStream(payload, onEvent) {
+  const url = getDaemonUrl();
+  if (!url) return null;
+  try {
+    const r = await fetch(`${url}/api/query/stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(payload.timeoutMs || 180000),
+    });
+    if (!r.ok || !r.body) return null;
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult = null;
+
+    const handleBlock = (block) => {
+      let event = "message";
+      const dataLines = [];
+      for (const line of block.split(/\r?\n/)) {
+        if (!line || line.startsWith(":")) continue;
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      if (!dataLines.length) return;
+      let data;
+      try {
+        data = JSON.parse(dataLines.join("\n"));
+      } catch {
+        data = { raw: dataLines.join("\n") };
+      }
+      if (event === "done") finalResult = data;
+      if (onEvent) onEvent(event, data);
+    };
+
+    for await (const chunk of r.body) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const block = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        handleBlock(block);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) handleBlock(buffer);
+    return finalResult;
+  } catch {
+    return null;
+  }
+}
+
+function printDaemonResults(result, activeModels, asJson, options = {}) {
   if (asJson) {
     console.log(JSON.stringify({
       event: "start",
@@ -497,7 +549,11 @@ function printDaemonResults(result, activeModels, asJson) {
     return;
   }
 
-  console.log(`\n\x1b[90m  Lun daemon — ${result.intent || result.mode || "query"}\x1b[0m\n`);
+  if (!options.skipHeader) {
+    console.log(`\n\x1b[90m  Lun daemon — ${result.intent || result.mode || "query"}\x1b[0m\n`);
+  } else {
+    console.log("");
+  }
   for (const r of result.results || []) {
     const name = PROVIDERS[r.provider]?.name || r.provider;
     const model = r.model || activeModels[r.provider] || "auto";
@@ -743,16 +799,31 @@ async function main() {
   }
 
   if (!process.env.LUN_NO_DAEMON && !discussMode && !summarize) {
-    const daemonResult = await queryDaemon({
+    const daemonPayload = {
       text: fullPrompt,
       mode: daemonMode || (cliProviders ? "ask" : "chat"),
       agents: activeProviders,
       sessionId: cliSessionId || undefined,
       timeoutMs: activeTimeout,
       cwd: process.cwd(),
-    });
+    };
+    let printedProgressHeader = false;
+    const daemonResult = jsonOutput
+      ? await queryDaemon(daemonPayload)
+      : await queryDaemonStream(daemonPayload, (event, data) => {
+        if (event === "progress") {
+          if (!printedProgressHeader) {
+            console.log(`\n\x1b[90m  Lun daemon — ${daemonPayload.mode}\x1b[0m\n`);
+            printedProgressHeader = true;
+          }
+          const provider = data.provider ? `${data.provider}: ` : "";
+          console.log(`  \x1b[33m~\x1b[0m ${provider}${data.message || data.stage || "working"}`);
+        } else if (event === "error") {
+          console.log(`  \x1b[31mx\x1b[0m ${data.error || "daemon error"}`);
+        }
+      }) || await queryDaemon(daemonPayload);
     if (daemonResult?.ok) {
-      printDaemonResults(daemonResult, activeModels, jsonOutput);
+      printDaemonResults(daemonResult, activeModels, jsonOutput, { skipHeader: printedProgressHeader });
       const session = new Session();
       session.addTurn(fullPrompt, (daemonResult.results || []).map(r => ({ ...r, model: r.model || activeModels[r.provider] || "auto" })));
       process.exit(0);
