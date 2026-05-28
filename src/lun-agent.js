@@ -21,7 +21,7 @@ To call all: <call agent="all">question</call>
 CRITICAL ROUTING RULES:
 - Greeting/chitchat → answer directly (NO tools)
 - Math/simple facts → answer directly
-- "최근/recent/latest" anything (news, releases, changes) → MUST use <call agent="kiro"> or <call agent="gemini">
+- "최근/recent/latest" anything (news, releases, changes) → MUST use <call agent="kiro"> or <call agent="agy">
 - Code review of provided code → <call agent="claude">
 - "vs/비교/어느게 나아" decisions → <call agent="all">
 - Coding examples (general) → answer directly
@@ -88,6 +88,7 @@ function buildPromptForPM(systemPrompt, history, userMessage, toolResults = []) 
  * @param {Array} options.history - Conversation history [{user, assistant}]
  * @param {string} options.userMessage - User's current message
  * @param {Object} options.models - Models per agent
+ * @param {string} options.cwd - Working directory for CLI agents
  * @param {Function} options.onToolCall - Called when PM delegates to a tool
  * @param {Function} options.onToolResult - Called when a tool returns
  * @param {Function} options.onPMThinking - Called when PM is thinking
@@ -101,6 +102,7 @@ export async function chatTurn(options) {
     history = [],
     userMessage,
     models = {},
+    cwd,
     onToolCall,
     onToolResult,
     onPMThinking,
@@ -124,6 +126,7 @@ export async function chatTurn(options) {
     const result = await runProvider(pmAgent, fullPrompt, {
       model: pmModel,
       timeout,
+      cwd,
     });
 
     pmResponse = result.text;
@@ -145,7 +148,7 @@ export async function chatTurn(options) {
           const allResults = await Promise.all(
             availableAgents.filter(a => a !== pmAgent).map(async (a) => {
               try {
-                const r = await runProvider(a, call.prompt, { model: models[a], timeout });
+                const r = await runProvider(a, call.prompt, { model: models[a], timeout, cwd });
                 return { agent: a, text: r.text, elapsed: r.elapsed };
               } catch (err) {
                 return { agent: a, text: `[Error] ${err.message}`, elapsed: 0, error: true };
@@ -163,6 +166,7 @@ export async function chatTurn(options) {
         const r = await runProvider(call.agent, call.prompt, {
           model: models[call.agent],
           timeout,
+          cwd,
         });
         return { agent: call.agent, text: r.text, elapsed: r.elapsed };
       } catch (err) {

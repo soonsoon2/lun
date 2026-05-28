@@ -54,7 +54,7 @@ export const CAPABILITIES = {
     strengths: ["web search", "image analysis", "code execution", "broad knowledge"],
     weaknesses: [],
   },
-  gemini: {
+  agy: {
     search: true,
     codeGen: true,
     codeReview: true,
@@ -63,7 +63,7 @@ export const CAPABILITIES = {
     imageAnalysis: true,
     longContext: true,
     reasoning: true,
-    strengths: ["web search", "multimodal", "very long context (1M+)", "Google ecosystem"],
+    strengths: ["web search", "multimodal", "long context", "Antigravity agent workflow"],
     weaknesses: [],
   },
   cline: {

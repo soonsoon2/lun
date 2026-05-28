@@ -71,17 +71,17 @@ You need at least one AI agent CLI installed:
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | Anthropic's reasoning |
 | [GitHub Copilot](https://docs.github.com/copilot) | `gh extension install github/gh-copilot` | OpenAI/GPT models |
 | [Kiro CLI](https://kiro.dev/docs/cli) | `npm i -g kiro-cli` | AWS-backed multi-model |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm i -g @google/gemini-cli` | Google's Gemini models |
+| Antigravity CLI | `agy install` | Google Antigravity agent |
 | [Codex CLI](https://github.com/openai/codex) | `npm i -g @openai/codex` | OpenAI Codex agent |
 | [Cline CLI](https://github.com/cline/cline) | `npm i -g @anthropic-ai/cline` | Multi-provider |
 
-### Gemini CLI setup
+### Antigravity CLI setup
 
-Gemini's headless mode (`-p`) requires an API key (OAuth only works in interactive mode):
+Lun calls Antigravity through `agy` in print mode:
 
 ```bash
-# Get a free key from https://aistudio.google.com/apikey
-echo 'GEMINI_API_KEY=your-key-here' > ~/.gemini/.env
+agy install
+agy -p "hello"
 ```
 
 > Adding a new provider is a single file edit in `src/providers.js`.
@@ -143,7 +143,7 @@ Or auto-install rules for all agents:
 lun --setup-rules
 ```
 
-This creates rule files for Claude (`CLAUDE.md`), Kiro (`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`), Gemini, and Codex.
+This creates rule files for Claude (`CLAUDE.md`), Kiro (`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`), Antigravity, and Codex.
 
 ---
 

@@ -10,10 +10,11 @@ import { chatTurn } from "../src/lun-agent.js";
 import { SKILLS, AGENT_SKILLS, agentsBySkill } from "../src/skills.js";
 import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
+import { DAEMON_LOG_PATH, readDaemonState } from "../src/daemon-store.js";
 import { t } from "../src/i18n.js";
 import { printBanner, selectFromList, promptText, Progress, VERSION } from "../src/ui.js";
 import { createInterface } from "readline";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync, closeSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -32,6 +33,8 @@ let maxTurns = 3;
 let maxTime = 120;
 let jsonOutput = false;
 let timeout = null;
+let cliSessionId = null;
+let daemonMode = null;
 let promptParts = [];
 
 for (let i = 0; i < args.length; i++) {
@@ -40,6 +43,8 @@ for (let i = 0; i < args.length; i++) {
   if (a === "--config") { cmdConfig(); process.exit(0); }
   if (a === "--setup-rules") { await cmdSetupRules(); process.exit(0); }
   if (a === "serve") { await cmdServe(); process.exit(0); }
+  if (a === "daemon") { await cmdDaemon(args[i + 1]); process.exit(0); }
+  if (a === "dashboard") { await cmdDaemon("foreground"); process.exit(0); }
   if (a === "chat") { await cmdChat(); process.exit(0); }
   if (a === "--skills") { cmdSkills(); process.exit(0); }
   if (a === "--move-sessions") { await cmdMoveSessions(); process.exit(0); }
@@ -53,6 +58,9 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--max-time") { maxTime = parseInt(args[++i]) || 120; }
   else if (a === "--json" || a === "-j") { jsonOutput = true; }
   else if (a === "--timeout" || a === "-t") { timeout = parseInt(args[++i]) * 1000 || null; }
+  else if (a === "--session") { cliSessionId = args[++i] || null; }
+  else if (a === "--chat") { daemonMode = "chat"; }
+  else if (a === "--ask") { daemonMode = "ask"; }
   else if (a === "--sessions" || a === "-H") { cmdSessions(); process.exit(0); }
   else if (a === "--help" || a === "-h") { cmdHelp(); process.exit(0); }
   else if (a === "--list" || a === "-l") { cmdList(); process.exit(0); }
@@ -127,7 +135,7 @@ async function cmdInit() {
     console.log("");
     const fastNotes = {
       claude: "haiku (fast, recommended)",
-      gemini: "gemini-2.5-flash (fast, recommended)",
+      agy: "auto (Antigravity default)",
       copilot: "claude-haiku-4.5 (fast)",
     };
     const note = fastNotes[pmChoice] ? ` — Tip: ${fastNotes[pmChoice]} for routing` : "";
@@ -230,6 +238,10 @@ function cmdHelp() {
     lun chat                   Lun Agent — PM-style conversation
     lun "prompt"               One-shot query to all agents
     lun serve                  Start web UI
+    lun daemon                 Start daemon dashboard in foreground
+    lun daemon start           Start daemon in background
+    lun daemon stop            Stop background daemon
+    lun daemon status          Show daemon status
 
   \x1b[1mOptions:\x1b[0m
     -P, --providers <list>     Providers (comma-separated)
@@ -238,6 +250,9 @@ function cmdHelp() {
     -d, --discuss              Autonomous discussion mode
     --max-turns <n>            Max rounds in discuss mode (default: 3)
     --max-time <sec>           Max time for discussion (default: 120)
+    --session <id>             Reuse a daemon API session id
+    --chat                     Use daemon PM chat mode for a one-shot prompt
+    --ask                      Use daemon multi-agent ask mode
     -j, --json                 JSON output (for agent integration)
     -t, --timeout <sec>        Timeout (default: 120)
     -l, --list                 List available providers
@@ -252,6 +267,8 @@ function cmdHelp() {
     lun --setup-rules          Install lun rules into current project
     lun --move-sessions        Change sessions storage path
     lun serve                  Start web UI (default: localhost:3456)
+    lun daemon                 Start daemon dashboard (default: localhost:3456)
+    lun daemon start|stop|status
 
   \x1b[1mExamples:\x1b[0m
     lun "REST vs GraphQL?"
@@ -365,6 +382,7 @@ async function cmdChat() {
         history,
         userMessage: t,
         models: config.models || {},
+        cwd: process.cwd(),
         timeout: (config.timeout || 120) * 1000,
         onPMThinking: (round) => {
           if (round === 0) console.log(`  \x1b[90m${PROVIDERS[pmAgent]?.name || pmAgent} thinking...\x1b[0m`);
@@ -420,6 +438,156 @@ async function cmdServe() {
   await new Promise(() => {});
 }
 
+async function pingDaemon(url) {
+  try {
+    const r = await fetch(`${url}/api/daemon`, { signal: AbortSignal.timeout(1000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForDaemon(url, timeoutMs = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await pingDaemon(url)) return true;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return false;
+}
+
+function getDaemonUrl() {
+  if (process.env.LUN_DAEMON_URL) return process.env.LUN_DAEMON_URL.replace(/\/$/, "");
+  const state = readDaemonState();
+  return state?.url || null;
+}
+
+async function queryDaemon(payload) {
+  const url = getDaemonUrl();
+  if (!url) return null;
+  try {
+    const r = await fetch(`${url}/api/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(payload.timeoutMs || 180000),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+function printDaemonResults(result, activeModels, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify({
+      event: "start",
+      intent: result.intent || result.mode,
+      strategy: result.strategy || "daemon",
+      providers: (result.results || []).map(r => r.provider),
+      daemon: true,
+      timestamp: new Date().toISOString(),
+    }));
+    for (const r of result.results || []) {
+      console.log(JSON.stringify({ event: "result", provider: r.provider, model: r.model || activeModels[r.provider] || "auto", text: r.text, elapsed: r.elapsed, error: !!r.error }));
+    }
+    console.log(JSON.stringify({ event: "done", total: (result.results || []).length, errors: (result.results || []).filter(r => r.error).length, skippedNote: result.skippedNote || null, daemon: true }));
+    return;
+  }
+
+  console.log(`\n\x1b[90m  Lun daemon — ${result.intent || result.mode || "query"}\x1b[0m\n`);
+  for (const r of result.results || []) {
+    const name = PROVIDERS[r.provider]?.name || r.provider;
+    const model = r.model || activeModels[r.provider] || "auto";
+    console.log(`\x1b[36m  --- ${name} (${r.elapsed || 0}s, ${model}) ---\x1b[0m`);
+    console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
+  }
+  if (result.skippedNote) console.log(`  \x1b[90m${result.skippedNote}\x1b[0m\n`);
+  console.log(`\x1b[90m  ────────────────────────────────────────────────────────\x1b[0m\n`);
+}
+
+async function cmdDaemon(action = "foreground") {
+  const port = process.env.LUN_PORT || process.env.PORT || 3456;
+  const serverPath = join(__dirname, "..", "server.js");
+  const { spawn: spawnChild } = await import("child_process");
+
+  const state = readDaemonState();
+  const requestedUrl = `http://127.0.0.1:${port}`;
+  const daemonUrl = state?.url || `http://127.0.0.1:${port}`;
+
+  if (action === "status") {
+    const alive = await pingDaemon(daemonUrl);
+    if (alive) {
+      console.log(`\n  \x1b[32mv\x1b[0m Lun daemon running`);
+      console.log(`  URL: ${daemonUrl}`);
+      console.log(`  PID: ${state?.pid || "?"}\n`);
+    } else {
+      console.log(`\n  \x1b[90mLun daemon is not running.\x1b[0m\n`);
+    }
+    return;
+  }
+
+  if (action === "stop") {
+    if (!state?.pid) {
+      console.log(`\n  \x1b[90mNo daemon pid found.\x1b[0m\n`);
+      return;
+    }
+    try {
+      process.kill(state.pid, "SIGTERM");
+      console.log(`\n  \x1b[32mv\x1b[0m Stopped Lun daemon (${state.pid})\n`);
+    } catch (err) {
+      console.log(`\n  \x1b[31mx\x1b[0m Failed to stop daemon: ${err.message}\n`);
+    }
+    return;
+  }
+
+  if (action === "start") {
+    if (await pingDaemon(requestedUrl)) {
+      console.log(`\n  \x1b[32mv\x1b[0m Lun daemon already running`);
+      console.log(`  URL: ${requestedUrl}\n`);
+      return;
+    }
+
+    mkdirSync(dirname(DAEMON_LOG_PATH), { recursive: true });
+    const out = openSync(DAEMON_LOG_PATH, "a");
+    const err = openSync(DAEMON_LOG_PATH, "a");
+    const child = spawnChild("node", [serverPath], {
+      detached: true,
+      stdio: ["ignore", out, err],
+      env: { ...process.env, LUN_PORT: String(port), LUN_DAEMON: "1" },
+    });
+    child.unref();
+    closeSync(out);
+    closeSync(err);
+
+    const started = await waitForDaemon(requestedUrl, 5000);
+    if (started) {
+      console.log(`\n  \x1b[32mv\x1b[0m Lun daemon started`);
+      console.log(`  URL: ${requestedUrl}`);
+      console.log(`  Log: ${DAEMON_LOG_PATH}\n`);
+    } else {
+      console.log(`\n  \x1b[33m!\x1b[0m Daemon process launched, but health check did not respond yet.`);
+      console.log(`  Log: ${DAEMON_LOG_PATH}\n`);
+    }
+    return;
+  }
+
+  console.log(`\n  \x1b[90mStarting Lun daemon dashboard on port ${port}...\x1b[0m\n`);
+
+  const child = spawnChild("node", [serverPath], {
+    stdio: "inherit",
+    env: { ...process.env, LUN_PORT: String(port), LUN_DAEMON: "1" },
+  });
+
+  child.on("error", (err) => {
+    console.error(`  \x1b[31mFailed to start daemon:\x1b[0m ${err.message}`);
+    process.exit(1);
+  });
+
+  await new Promise(() => {});
+}
+
 // ============================================================
 // SETUP RULES — install lun rule files into current project
 // ============================================================
@@ -436,7 +604,7 @@ async function cmdSetupRules() {
     { id: "claude", file: "claude.md", dest: "CLAUDE.md", append: true, desc: "Claude Code (CLAUDE.md)" },
     { id: "kiro", file: "kiro.md", dest: ".kiro/steering/lun.md", append: false, desc: "Kiro (.kiro/steering/lun.md)" },
     { id: "copilot", file: "copilot.md", dest: ".github/copilot-instructions.md", append: true, desc: "Copilot (.github/copilot-instructions.md)" },
-    { id: "gemini", file: "gemini.md", dest: ".gemini/AGENTS.md", append: true, desc: "Gemini (.gemini/AGENTS.md)" },
+    { id: "agy", file: "agy.md", dest: ".antigravity/AGENTS.md", append: true, desc: "Antigravity (.antigravity/AGENTS.md)" },
     { id: "codex", file: "codex.md", dest: "AGENTS.md", append: true, desc: "Codex / OpenAI (AGENTS.md)" },
   ];
 
@@ -570,6 +738,23 @@ async function main() {
 
   if (skipped.length > 0 && !jsonOutput) {
     console.log(`  \x1b[90m${t("skipped", skipped.join(", "))}\x1b[0m`);
+  }
+
+  if (!process.env.LUN_NO_DAEMON && !discussMode && !summarize) {
+    const daemonResult = await queryDaemon({
+      text: fullPrompt,
+      mode: daemonMode || (cliProviders ? "ask" : "chat"),
+      agents: activeProviders,
+      sessionId: cliSessionId || undefined,
+      timeoutMs: activeTimeout,
+      cwd: process.cwd(),
+    });
+    if (daemonResult?.ok) {
+      printDaemonResults(daemonResult, activeModels, jsonOutput);
+      const session = new Session();
+      session.addTurn(fullPrompt, (daemonResult.results || []).map(r => ({ ...r, model: r.model || activeModels[r.provider] || "auto" })));
+      process.exit(0);
+    }
   }
 
   // Discuss mode — autonomous multi-turn debate

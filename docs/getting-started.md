@@ -32,13 +32,13 @@ This will ask you to:
 
 Your config is saved to `~/.lun/config.json`.
 
-## Gemini CLI Note
+## Antigravity CLI Note
 
-Gemini's headless mode (`-p`) requires an API key — OAuth only works in interactive mode.
+Lun calls Antigravity through the `agy` command in print mode.
 
 ```bash
-# Get a free key from https://aistudio.google.com/apikey
-echo 'GEMINI_API_KEY=your-key-here' > ~/.gemini/.env
+agy install
+agy -p "hello"
 ```
 
 ## Verify Installation

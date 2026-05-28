@@ -1,0 +1,163 @@
+{
+  "name": "vscode-lun",
+  "displayName": "Lun",
+  "description": "Use the Lun daemon from VS Code: ask agents about selections, files, workers, and usage.",
+  "version": "0.2.0",
+  "publisher": "soonsoon",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onChatParticipant:vscode-lun.lun",
+    "onCommand:lun.openPanel",
+    "onCommand:lun.askSelection",
+    "onCommand:lun.reviewCurrentFile",
+    "onCommand:lun.explainDiagnostics",
+    "onCommand:lun.startDaemon",
+    "onCommand:lun.stopDaemon",
+    "onCommand:lun.showStatus"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "vscode-lun.lun",
+        "name": "lun",
+        "fullName": "Lun",
+        "description": "Ask the local Lun daemon and its agent workers",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "ask",
+            "description": "Ask Lun about the current request"
+          },
+          {
+            "name": "review",
+            "description": "Review the active file"
+          },
+          {
+            "name": "diagnostics",
+            "description": "Explain diagnostics in the active file"
+          },
+          {
+            "name": "status",
+            "description": "Show Lun daemon status"
+          },
+          {
+            "name": "workers",
+            "description": "Show Lun worker status"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "lun.openPanel",
+        "title": "Lun: Open Panel"
+      },
+      {
+        "command": "lun.askSelection",
+        "title": "Lun: Ask About Selection"
+      },
+      {
+        "command": "lun.reviewCurrentFile",
+        "title": "Lun: Review Current File"
+      },
+      {
+        "command": "lun.explainDiagnostics",
+        "title": "Lun: Explain Diagnostics"
+      },
+      {
+        "command": "lun.startDaemon",
+        "title": "Lun: Start Daemon"
+      },
+      {
+        "command": "lun.stopDaemon",
+        "title": "Lun: Stop Daemon"
+      },
+      {
+        "command": "lun.showStatus",
+        "title": "Lun: Show Status"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "lun.askSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@20"
+        },
+        {
+          "command": "lun.reviewCurrentFile",
+          "group": "navigation@21"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "lun.openPanel"
+        },
+        {
+          "command": "lun.askSelection"
+        },
+        {
+          "command": "lun.reviewCurrentFile"
+        },
+        {
+          "command": "lun.explainDiagnostics"
+        },
+        {
+          "command": "lun.startDaemon"
+        },
+        {
+          "command": "lun.stopDaemon"
+        },
+        {
+          "command": "lun.showStatus"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Lun",
+      "properties": {
+        "lun.daemonUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3456",
+          "description": "Base URL for the local Lun daemon."
+        },
+        "lun.autoStartDaemon": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start the Lun daemon automatically when needed."
+        },
+        "lun.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Lun executable. Leave empty to use this workspace's bin/lun.js when available, otherwise the global lun command."
+        },
+        "lun.defaultMode": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "ask"
+          ],
+          "default": "chat",
+          "description": "Default Lun mode used by extension commands."
+        },
+        "lun.defaultAgents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "claude",
+            "codex"
+          ],
+          "description": "Agents used by default for extension requests."
+        }
+      }
+    }
+  }
+}

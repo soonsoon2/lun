@@ -6,6 +6,8 @@ import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
 import { runCodexSDK } from "./codex-sdk-runner.js";
+import { runClaudeWorker } from "./claude-worker.js";
+import { runManagedAgentWorker } from "./agent-workers.js";
 
 // ============================================================
 // OUTPUT CLEANING
@@ -52,7 +54,6 @@ export function cleanOutput(raw) {
     .replace(/^session id:.*$/gm, "")
     .replace(/^-{4,}$/gm, "")
     .replace(/^tokens used.*$/gm, "")
-    .replace(/^\d{1,3}(?:,\d{3})*$/gm, "")  // standalone token counts like "12,350"
     .replace(/^user\s*$/gm, "")
     .replace(/^codex\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
@@ -80,6 +81,24 @@ export function runProvider(providerId, prompt, options = {}) {
     }).catch(err => Promise.reject(err));
   }
 
+  if (providerId === "claude" && process.env.LUN_DAEMON === "1" && process.env.LUN_DISABLE_CLAUDE_WORKER !== "1") {
+    return runClaudeWorker(prompt, {
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
+
+  if (["kiro", "copilot", "agy"].includes(providerId) && process.env.LUN_DAEMON === "1") {
+    return runManagedAgentWorker(providerId, prompt, {
+      model: model || providerDef.defaultModel,
+      cwd: cwd || process.env.HOME,
+      timeout,
+      onChunk,
+    }).catch(err => Promise.reject(err));
+  }
+
   return new Promise((resolve, reject) => {
     let effectiveSessionId = resumeSessionId || null;
 
@@ -87,7 +106,7 @@ export function runProvider(providerId, prompt, options = {}) {
     if (providerId === "claude" && !effectiveSessionId) effectiveSessionId = randomUUID();
     if (providerId === "copilot" && !effectiveSessionId) effectiveSessionId = "kc-" + Date.now();
 
-    const args = providerDef.buildArgs(prompt, model || providerDef.defaultModel, { sessionId: effectiveSessionId, agent: options.agent });
+    const args = providerDef.buildArgs(prompt, model || providerDef.defaultModel, { sessionId: effectiveSessionId, agent: options.agent, cwd });
 
     // Claude first turn: --session-id instead of --resume
     if (providerId === "claude" && !resumeSessionId && effectiveSessionId) {

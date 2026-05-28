@@ -24,6 +24,10 @@
   "files": [
     "bin/",
     "src/",
+    "public/",
+    "rules/",
+    "docs/",
+    "server.js",
     "README.md"
   ],
   "engines": {
