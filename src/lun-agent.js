@@ -92,6 +92,8 @@ function buildPromptForPM(systemPrompt, history, userMessage, toolResults = []) 
  * @param {Function} options.onToolCall - Called when PM delegates to a tool
  * @param {Function} options.onToolResult - Called when a tool returns
  * @param {Function} options.onPMThinking - Called when PM is thinking
+ * @param {Function} options.onPMChunk - Called when PM streams text
+ * @param {Function} options.onToolChunk - Called when a delegated agent streams text
  * @param {Function} options.onPMResponse - Called with final PM response
  */
 export async function chatTurn(options) {
@@ -106,6 +108,8 @@ export async function chatTurn(options) {
     onToolCall,
     onToolResult,
     onPMThinking,
+    onPMChunk,
+    onToolChunk,
     onPMResponse,
     timeout = 120000,
     maxToolRounds = 3,
@@ -127,6 +131,7 @@ export async function chatTurn(options) {
       model: pmModel,
       timeout,
       cwd,
+      onChunk: onPMChunk,
     });
 
     pmResponse = result.text;
@@ -148,7 +153,7 @@ export async function chatTurn(options) {
           const allResults = await Promise.all(
             availableAgents.filter(a => a !== pmAgent).map(async (a) => {
               try {
-                const r = await runProvider(a, call.prompt, { model: models[a], timeout, cwd });
+                const r = await runProvider(a, call.prompt, { model: models[a], timeout, cwd, onChunk: onToolChunk });
                 return { agent: a, text: r.text, elapsed: r.elapsed };
               } catch (err) {
                 return { agent: a, text: `[Error] ${err.message}`, elapsed: 0, error: true };
@@ -167,6 +172,7 @@ export async function chatTurn(options) {
           model: models[call.agent],
           timeout,
           cwd,
+          onChunk: onToolChunk,
         });
         return { agent: call.agent, text: r.text, elapsed: r.elapsed };
       } catch (err) {

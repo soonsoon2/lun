@@ -36,6 +36,7 @@ When VS Code Chat or Copilot Chat is available, Lun registers as `@lun`.
 ```
 
 The dashboard remains available through `Lun: Open Panel`; chat requests are routed through the local daemon.
+Chat requests stream visible progress updates such as PM planning, agent calls, and agent completion before the final response.
 
 ## Settings
 
@@ -43,4 +44,4 @@ The dashboard remains available through `Lun: Open Panel`; chat requests are rou
 - `lun.autoStartDaemon`: start the daemon on demand.
 - `lun.executablePath`: optional path to the `lun` executable.
 - `lun.defaultMode`: `chat` or `ask`.
-- `lun.defaultAgents`: agents used by default, for example `["claude", "codex"]`.
+- `lun.defaultAgents`: agents used by default. Leave empty to use the daemon configuration.
