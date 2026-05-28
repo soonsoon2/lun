@@ -43,6 +43,11 @@ function workspaceCwd() {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
 }
 
+function configuredAgents() {
+  const value = config().get("defaultAgents");
+  return Array.isArray(value) && value.length > 0 ? value : undefined;
+}
+
 function lunCommand() {
   const configured = String(config().get("executablePath") || "").trim();
   if (configured) return { command: configured, argsPrefix: [] };
@@ -90,6 +95,92 @@ function requestJson(method, path, body, timeoutMs = 180000) {
     if (data) req.write(data);
     req.end();
   });
+}
+
+function requestEventStream(method, path, body, onEvent, token, timeoutMs = 180000) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, daemonUrl());
+    const data = body ? JSON.stringify(body) : "";
+    let settled = false;
+    let buffer = "";
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+
+    const req = http.request({
+      hostname: url.hostname,
+      port: url.port,
+      path: `${url.pathname}${url.search}`,
+      method,
+      headers: {
+        "content-type": "application/json",
+        "accept": "text/event-stream",
+        "content-length": Buffer.byteLength(data),
+      },
+      timeout: timeoutMs,
+    }, res => {
+      if (res.statusCode >= 400) {
+        let raw = "";
+        res.on("data", chunk => { raw += chunk.toString(); });
+        res.on("end", () => finish(reject, new Error(raw || `HTTP ${res.statusCode}`)));
+        return;
+      }
+
+      res.setEncoding("utf8");
+      res.on("data", chunk => {
+        buffer += chunk;
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const event = parseSseBlock(block);
+          if (!event) continue;
+          onEvent?.(event);
+          if (event.type === "done") finish(resolve, event.data);
+          if (event.type === "error") finish(reject, new Error(event.data?.error || "Lun stream failed"));
+        }
+      });
+      res.on("end", () => {
+        if (!settled) finish(reject, new Error("Lun stream ended before completion."));
+      });
+    });
+
+    req.on("error", err => {
+      if (token?.isCancellationRequested) finish(reject, new Error("cancelled"));
+      else finish(reject, err);
+    });
+    req.on("timeout", () => {
+      req.destroy(new Error(`timeout (${timeoutMs / 1000}s)`));
+    });
+
+    const cancelDisposable = token?.onCancellationRequested?.(() => {
+      req.destroy(new Error("cancelled"));
+    });
+    req.on("close", () => cancelDisposable?.dispose?.());
+
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+function parseSseBlock(block) {
+  const lines = block.split(/\r?\n/);
+  let type = "message";
+  const data = [];
+  for (const line of lines) {
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("event:")) type = line.slice(6).trim();
+    if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+  }
+  if (!data.length && type === "message") return null;
+  try {
+    return { type, data: data.length ? JSON.parse(data.join("\n")) : {} };
+  } catch {
+    return { type, data: { text: data.join("\n") } };
+  }
 }
 
 async function ensureDaemon() {
@@ -165,11 +256,24 @@ async function queryLun({ text, mode, agents, sessionId }) {
   const payload = {
     text,
     mode: mode || config().get("defaultMode") || "chat",
-    agents: agents || config().get("defaultAgents") || ["claude", "codex"],
+    agents: agents || configuredAgents(),
     sessionId,
     cwd: workspaceCwd(),
   };
   return requestJson("POST", "/api/query", payload, 180000);
+}
+
+async function queryLunStream({ text, mode, agents, sessionId }, onEvent, token) {
+  await ensureDaemon();
+  await refreshStatus();
+  const payload = {
+    text,
+    mode: mode || config().get("defaultMode") || "chat",
+    agents: agents || configuredAgents(),
+    sessionId,
+    cwd: workspaceCwd(),
+  };
+  return requestEventStream("POST", "/api/query/stream", payload, onEvent, token, 180000);
 }
 
 function registerChatParticipant(context) {
@@ -205,14 +309,28 @@ async function chatHandler(request, context, stream, token) {
     }
 
     const text = buildChatPrompt(command, request.prompt || "");
-    stream.progress("Asking Lun agents...");
-    const result = await queryLun({
+    stream.progress("Connecting to Lun daemon...");
+    stream.markdown("### Progress\n\n");
+    const seenProgress = new Set();
+    const startedAt = Date.now();
+    const result = await queryLunStream({
       text,
       mode: "chat",
       sessionId: `vscode-chat-${workspaceCwd()}`,
-    });
+    }, event => {
+      if (event.type !== "progress") return;
+      const message = event.data?.message || event.data?.stage || "Lun is working";
+      const provider = event.data?.provider ? ` (${event.data.provider})` : "";
+      const key = `${event.data?.stage || ""}:${message}`;
+      stream.progress(`${message}${provider}`);
+      if (seenProgress.has(key)) return;
+      seenProgress.add(key);
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+      stream.markdown(`- ${elapsed}s: ${escapeMarkdown(message)}${provider}\n`);
+    }, token);
 
     if (token?.isCancellationRequested) return { metadata: { command, cancelled: true } };
+    stream.markdown("\n---\n\n");
     stream.markdown(formatLunMarkdown(result));
     return { metadata: { command } };
   } catch (err) {
@@ -220,6 +338,10 @@ async function chatHandler(request, context, stream, token) {
     output.appendLine(err.stack || err.message);
     return { metadata: { error: err.message } };
   }
+}
+
+function escapeMarkdown(value) {
+  return String(value || "").replace(/[\\`*_{}[\]()#+\-.!|>]/g, "\\$&");
 }
 
 function buildChatPrompt(command, prompt) {

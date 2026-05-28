@@ -257,6 +257,11 @@ function localFastPath(text) {
   return null;
 }
 
+function writeSse(raw, event, data = {}) {
+  raw.write(`event: ${event}\n`);
+  raw.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
 // ============================================================
 // API: GET /api/providers
 // ============================================================
@@ -290,12 +295,31 @@ app.get("/api/daemon", async () => {
 });
 
 app.get("/api/workers", async () => {
+  const config = loadConfig() || defaultConfig();
+  const configuredProviders = config.providers || Object.keys(PROVIDERS);
+  const activeWorkers = [
+    ...getClaudeWorkerStatuses(),
+    ...getManagedAgentWorkerStatuses(),
+    { provider: "codex", alive: true, ready: true, note: "managed by Codex SDK thread cache" },
+  ];
+  const byProvider = new Map(activeWorkers.map(worker => [worker.provider, worker]));
+
   return {
-    workers: [
-      ...getClaudeWorkerStatuses(),
-      ...getManagedAgentWorkerStatuses(),
-      { provider: "codex", alive: true, ready: true, note: "managed by Codex SDK thread cache" },
-    ],
+    workers: configuredProviders
+      .filter(provider => PROVIDERS[provider])
+      .map(provider => byProvider.get(provider) || {
+        provider,
+        model: config.models?.[provider] || PROVIDERS[provider]?.defaultModel || "auto",
+        alive: false,
+        ready: checkAvailable(provider),
+        persistent: provider === "codex",
+        sessionId: null,
+        queued: 0,
+        busy: false,
+        runs: 0,
+        lastError: null,
+        note: checkAvailable(provider) ? "configured; worker starts on first request" : "configured but executable is unavailable",
+      }),
   };
 });
 
@@ -307,6 +331,209 @@ app.get("/api/usage", async (req) => {
 app.get("/api/logs", async (req) => {
   const limit = Number(req.query?.limit || 200);
   return { logs: readNdjson(DAEMON_LOG_PATH, Math.min(Math.max(limit, 20), 1000)), path: DAEMON_LOG_PATH };
+});
+
+app.post("/api/query/stream", async (req, reply) => {
+  const body = req.body || {};
+  const text = String(body.text || "").trim();
+  if (!text) {
+    reply.code(400);
+    return { error: "missing text" };
+  }
+
+  reply.hijack();
+  const raw = reply.raw;
+  raw.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    "connection": "keep-alive",
+    "x-accel-buffering": "no",
+  });
+  raw.write(":\n\n");
+
+  let closed = false;
+  raw.on("close", () => { closed = true; });
+  const send = (event, data = {}) => {
+    if (!closed && !raw.destroyed) writeSse(raw, event, data);
+  };
+
+  const requestId = randomUUID();
+  const sessionId = String(body.sessionId || `api-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const mode = body.mode || "chat";
+  const cwd = normalizeCwd(body.cwd);
+  const config = loadConfig() || defaultConfig();
+  const requestedAgents = Array.isArray(body.agents) && body.agents.length > 0 ? body.agents : (config.providers || Object.keys(PROVIDERS));
+  const availableProviders = requestedAgents.filter(id => PROVIDERS[id] && checkAvailable(id));
+  const timeout = Number(body.timeoutMs || 180000);
+
+  appendUsageEvent({ type: "request", requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+  appendDaemonLog("api stream query received", { requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+
+  try {
+    send("progress", { requestId, stage: "received", message: "Lun daemon received the request" });
+
+    const fastAnswer = mode === "chat" || mode === "auto" ? localFastPath(text) : null;
+    if (fastAnswer) {
+      recordProviderRun({
+        requestId,
+        sessionId,
+        mode,
+        provider: "local",
+        model: "fast-path",
+        latencyMs: 0,
+        inputText: text,
+        outputText: fastAnswer,
+      });
+      send("done", { ok: true, requestId, sessionId, mode, fastPath: true, results: [{ provider: "local", model: "fast-path", text: fastAnswer, elapsed: 0 }] });
+      raw.end();
+      return;
+    }
+
+    if (mode !== "chat") {
+      send("progress", { requestId, stage: "fallback", message: `${mode} mode is running without detailed PM progress` });
+      const routed = await moderatedQuery(text, availableProviders, {
+        models: config.models || {},
+        timeout,
+        onResult: (r) => {
+          recordProviderRun({
+            requestId,
+            sessionId,
+            mode,
+            provider: r.provider,
+            model: config.models?.[r.provider],
+            status: r.error ? "error" : "ok",
+            latencyMs: (r.elapsed || 0) * 1000,
+            inputText: text,
+            outputText: r.text || "",
+            error: r.error ? r.text : null,
+          });
+          send("progress", {
+            requestId,
+            stage: "agent_result",
+            provider: r.provider,
+            elapsed: r.elapsed || 0,
+            message: `${r.provider} finished in ${r.elapsed || 0}s`,
+          });
+        },
+      });
+      send("done", { ok: true, requestId, sessionId, mode, intent: routed.intent, strategy: routed.strategy, skippedNote: routed.skippedNote, results: routed.results });
+      raw.end();
+      return;
+    }
+
+    const pmAgent = config.pmAgent || "claude";
+    const pmModel = config.pmModel || config.models?.[pmAgent];
+    const history = apiChatHistories.get(sessionId) || [];
+    let lastChunkAt = 0;
+
+    send("progress", {
+      requestId,
+      stage: "pm_start",
+      provider: pmAgent,
+      model: pmModel || "auto",
+      message: `${pmAgent} PM is planning the request`,
+    });
+
+    const result = await chatTurn({
+      pmAgent,
+      pmModel,
+      availableAgents: availableProviders,
+      history,
+      userMessage: text,
+      models: config.models || {},
+      cwd,
+      timeout,
+      onPMThinking: (round) => {
+        send("progress", {
+          requestId,
+          stage: "pm_thinking",
+          provider: pmAgent,
+          round: round + 1,
+          message: `${pmAgent} PM thinking, round ${round + 1}`,
+        });
+      },
+      onPMChunk: (provider, chunk) => {
+        const now = Date.now();
+        if (now - lastChunkAt < 1500) return;
+        lastChunkAt = now;
+        send("progress", {
+          requestId,
+          stage: "pm_streaming",
+          provider,
+          message: `${provider} is drafting or routing`,
+        });
+      },
+      onToolCall: (agent, prompt) => {
+        send("progress", {
+          requestId,
+          stage: "tool_call",
+          provider: agent,
+          inputChars: prompt.length,
+          message: agent === "all" ? "Calling all available specialist agents" : `Calling ${agent}`,
+        });
+      },
+      onToolChunk: (provider) => {
+        const now = Date.now();
+        if (now - lastChunkAt < 1500) return;
+        lastChunkAt = now;
+        send("progress", {
+          requestId,
+          stage: "tool_streaming",
+          provider,
+          message: `${provider} is responding`,
+        });
+      },
+      onToolResult: (agent, output, elapsed) => {
+        recordProviderRun({
+          requestId,
+          sessionId,
+          mode,
+          provider: agent,
+          model: config.models?.[agent],
+          latencyMs: (elapsed || 0) * 1000,
+          inputText: text,
+          outputText: output || "",
+        });
+        send("progress", {
+          requestId,
+          stage: "tool_result",
+          provider: agent,
+          elapsed: elapsed || 0,
+          outputChars: (output || "").length,
+          message: `${agent} finished in ${elapsed || 0}s`,
+        });
+      },
+    });
+
+    recordProviderRun({
+      requestId,
+      sessionId,
+      mode,
+      provider: pmAgent,
+      model: pmModel,
+      latencyMs: (result.elapsed || 0) * 1000,
+      inputText: text,
+      outputText: result.response || "",
+    });
+
+    history.push({ user: text, assistant: result.response });
+    while (history.length > 10) history.shift();
+    apiChatHistories.set(sessionId, history);
+
+    send("done", {
+      ok: true,
+      requestId,
+      sessionId,
+      mode,
+      results: [{ provider: pmAgent, model: pmModel || "auto", text: result.response, elapsed: result.elapsed }],
+      toolCalls: result.toolCalls,
+    });
+    raw.end();
+  } catch (err) {
+    recordProviderRun({ requestId, sessionId, mode, provider: body.provider || "daemon", status: "error", inputText: text, error: err.message });
+    send("error", { error: err.message, requestId, sessionId });
+    raw.end();
+  }
 });
 
 app.post("/api/query", async (req, reply) => {

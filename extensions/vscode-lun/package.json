@@ -2,7 +2,7 @@
   "name": "vscode-lun",
   "displayName": "Lun",
   "description": "Use the Lun daemon from VS Code: ask agents about selections, files, workers, and usage.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "soonsoon",
   "engines": {
     "vscode": "^1.85.0"
@@ -151,11 +151,8 @@
           "items": {
             "type": "string"
           },
-          "default": [
-            "claude",
-            "codex"
-          ],
-          "description": "Agents used by default for extension requests."
+          "default": [],
+          "description": "Agents used by default for extension requests. Leave empty to use the daemon configuration."
         }
       }
     }
