@@ -228,13 +228,15 @@ Features: real-time streaming, session history sidebar, per-agent model settings
 
 | Agent | Daemon strategy | Notes |
 |-------|-----------------|-------|
-| Kiro | Persistent ACP worker | `kiro-cli acp` stays alive and reuses one session per model/workspace. |
-| GitHub Copilot | Persistent ACP worker | `copilot --acp --stdio` stays alive and reuses one session per model/workspace. |
+| Kiro | Persistent ACP worker | `kiro-cli acp` stays alive; each prompt gets a fresh ACP session by default. |
+| GitHub Copilot | Persistent ACP worker | `copilot --acp --stdio` stays alive; each prompt gets a fresh ACP session by default. |
 | Claude Code | Persistent stream-json worker | `claude` stays alive and receives prompts over stdin. |
 | Codex | Persistent SDK thread cache | Uses `@openai/codex-sdk` threads instead of spawning `codex exec` each turn. |
 | Antigravity | Queued spawn-per-turn worker | `agy` currently has no stable ACP/stdio daemon protocol exposed, so Lun keeps queueing/usage/logging but still invokes print mode per request. |
 
-The daemon removes process startup and session wiring overhead where the agent exposes a machine protocol. Model thinking time, tool use, network latency, and project file reading still remain the real floor.
+The daemon removes process startup overhead where the agent exposes a machine protocol. Kiro and Copilot keep the ACP process warm but use a fresh ACP session per prompt by default, which avoids long-lived context buildup while still skipping CLI cold start. Set `LUN_ACP_REUSE_SESSION=1` only if you explicitly want provider-side session memory.
+
+CLI requests use the same streaming daemon endpoint as VS Code, so long Kiro runs show ACP phase changes, streamed chunks when the agent emits them, and heartbeat lines while the worker is busy. Model thinking time, tool use, network latency, and project file reading still remain the real floor.
 
 ---
 
@@ -320,6 +322,7 @@ Stored at `~/.lun/config.json`:
 | `LUN_HOST` | `127.0.0.1` | Web UI bind address |
 | `LUN_PREWARM_WORKERS` | `1` | Set to `0` to skip daemon worker prewarm on startup |
 | `LUN_DISABLE_ACP_WORKER` | unset | Set to `1` to force Kiro/Copilot back to spawn-per-turn mode |
+| `LUN_ACP_REUSE_SESSION` | unset | Set to `1` to reuse Kiro/Copilot ACP sessions across prompts |
 | `PORT` | `3456` | Alternative port variable |
 
 ---

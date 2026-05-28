@@ -817,7 +817,12 @@ async function main() {
             printedProgressHeader = true;
           }
           const provider = data.provider ? `${data.provider}: ` : "";
-          console.log(`  \x1b[33m~\x1b[0m ${provider}${data.message || data.stage || "working"}`);
+          const elapsed = typeof data.elapsed === "number" ? ` \x1b[90m${data.elapsed}s\x1b[0m` : "";
+          console.log(`  \x1b[33m~\x1b[0m ${provider}${data.message || data.stage || "working"}${elapsed}`);
+          if (data.preview) {
+            const preview = String(data.preview).replace(/\s+/g, " ").slice(0, 160);
+            if (preview) console.log(`    \x1b[90m${preview}\x1b[0m`);
+          }
         } else if (event === "error") {
           console.log(`  \x1b[31mx\x1b[0m ${data.error || "daemon error"}`);
         }

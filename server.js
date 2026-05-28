@@ -83,6 +83,41 @@ function isSafeThreadId(value) {
   return /^[a-zA-Z0-9._-]+$/.test(value || "");
 }
 
+function currentWorkerStatuses() {
+  return [
+    ...getClaudeWorkerStatuses(),
+    ...getAcpWorkerStatuses(),
+    ...getManagedAgentWorkerStatuses(),
+    ...getCodexSDKStatuses(),
+  ];
+}
+
+function describeAgentDelta(provider, delta) {
+  const text = String(delta || "").trim();
+  if (!text) return null;
+  const acp = text.match(/^\[acp:([^\]]+)\]\s*(.*)$/);
+  if (acp) {
+    const phase = acp[1];
+    const detail = acp[2] || "";
+    return {
+      stage: `acp_${phase}`,
+      message: `${provider} ACP ${phase}${detail ? ` (${detail})` : ""}`,
+      internal: true,
+    };
+  }
+  if (text.startsWith("[thinking]")) {
+    return { stage: "agent_thinking", message: `${provider} is thinking`, preview: text.slice(0, 160) };
+  }
+  if (text.startsWith("[tool]")) {
+    return { stage: "agent_tool", message: `${provider} ${text.replace(/^\[tool\]\s*/, "")}` };
+  }
+  return {
+    stage: "agent_chunk",
+    message: `${provider} streamed ${text.length} chars`,
+    preview: text.slice(0, 160),
+  };
+}
+
 async function prewarmPersistentWorkers() {
   if (!IS_DAEMON || process.env.LUN_PREWARM_WORKERS === "0") return;
   const config = loadConfig() || defaultConfig();
@@ -372,10 +407,7 @@ app.get("/api/workers", async () => {
   const config = loadConfig() || defaultConfig();
   const configuredProviders = config.providers || Object.keys(PROVIDERS);
   const activeWorkers = [
-    ...getClaudeWorkerStatuses(),
-    ...getAcpWorkerStatuses(),
-    ...getManagedAgentWorkerStatuses(),
-    ...getCodexSDKStatuses(),
+    ...currentWorkerStatuses(),
   ].filter(worker => configuredProviders.includes(worker.provider));
   const activeProviders = new Set(activeWorkers.map(worker => worker.provider));
   const fallbackWorkers = configuredProviders
@@ -455,6 +487,31 @@ app.post("/api/query/stream", async (req, reply) => {
 
   appendUsageEvent({ type: "request", requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
   appendDaemonLog("api stream query received", { requestId, sessionId, mode, provider: body.provider || "all", inputChars: text.length });
+  const startedAt = Date.now();
+  let heartbeatProviders = new Set(availableProviders);
+  const heartbeat = setInterval(() => {
+    const elapsed = parseFloat(((Date.now() - startedAt) / 1000).toFixed(1));
+    const busyWorkers = currentWorkerStatuses()
+      .filter(worker => heartbeatProviders.has(worker.provider) && (worker.busy || worker.queued > 0));
+    for (const worker of busyWorkers) {
+      send("progress", {
+        requestId,
+        stage: "heartbeat",
+        provider: worker.provider,
+        elapsed,
+        protocol: worker.protocol,
+        phase: worker.phase,
+        activeElapsedSec: worker.activeElapsedSec || elapsed,
+        queued: worker.queued || 0,
+        busy: !!worker.busy,
+        message: `${worker.provider} still working (${worker.protocol || "worker"}, ${worker.phase || "busy"}, ${worker.activeElapsedSec || elapsed}s)`,
+      });
+    }
+  }, 5000);
+  const endStream = () => {
+    clearInterval(heartbeat);
+    raw.end();
+  };
 
   try {
     send("progress", { requestId, stage: "received", message: "Lun daemon received the request" });
@@ -472,16 +529,32 @@ app.post("/api/query/stream", async (req, reply) => {
         outputText: fastAnswer,
       });
       send("done", { ok: true, requestId, sessionId, mode, fastPath: true, results: [{ provider: "local", model: "fast-path", text: fastAnswer, elapsed: 0 }] });
-      raw.end();
+      endStream();
       return;
     }
 
     if (mode !== "chat") {
-      send("progress", { requestId, stage: "fallback", message: `${mode} mode is running without detailed PM progress` });
+      send("progress", { requestId, stage: "route_start", message: `${mode} mode is routing agents` });
       const routed = await moderatedQuery(text, availableProviders, {
         models: config.models || {},
         cwd,
         timeout,
+        onRoute: (plan) => {
+          heartbeatProviders = new Set(plan.providers);
+          send("progress", {
+            requestId,
+            stage: "route",
+            intent: plan.intent,
+            strategy: plan.strategy,
+            providers: plan.providers,
+            message: `Routing to ${plan.providers.join(", ")}`,
+          });
+        },
+        onChunk: (provider, delta) => {
+          const described = describeAgentDelta(provider, delta);
+          if (!described) return;
+          send("progress", { requestId, provider, ...described });
+        },
         onResult: (r) => {
           recordProviderRun({
             requestId,
@@ -505,7 +578,7 @@ app.post("/api/query/stream", async (req, reply) => {
         },
       });
       send("done", { ok: true, requestId, sessionId, mode, intent: routed.intent, strategy: routed.strategy, skippedNote: routed.skippedNote, results: routed.results });
-      raw.end();
+      endStream();
       return;
     }
 
@@ -542,9 +615,18 @@ app.post("/api/query/stream", async (req, reply) => {
       },
       onToolCall: (agent, prompt) => {
         sendProgress("tool_call", agent, agent === "all" ? "Calling all available specialist agents" : `Calling ${agent}`, { inputChars: prompt.length });
+        if (agent === "all") heartbeatProviders = new Set(availableProviders.filter(id => id !== pmAgent));
+        else heartbeatProviders.add(agent);
       },
-      onToolChunk: (provider) => {
-        sendProgress("tool_streaming", provider, `${provider} is responding`, {}, 12000);
+      onToolChunk: (provider, delta) => {
+        const described = describeAgentDelta(provider, delta);
+        if (described?.internal) {
+          sendProgress(described.stage, provider, described.message, { preview: described.preview }, 0);
+        } else if (described) {
+          sendProgress(described.stage, provider, described.message, { preview: described.preview }, 12000);
+        } else {
+          sendProgress("tool_streaming", provider, `${provider} is responding`, {}, 12000);
+        }
       },
       onToolResult: (agent, output, elapsed) => {
         recordProviderRun({
@@ -599,11 +681,11 @@ app.post("/api/query/stream", async (req, reply) => {
       toolCalls: result.toolCalls,
       report,
     });
-    raw.end();
+    endStream();
   } catch (err) {
     recordProviderRun({ requestId, sessionId, mode, provider: body.provider || "daemon", status: "error", inputText: text, error: err.message });
     send("error", { error: err.message, requestId, sessionId });
-    raw.end();
+    endStream();
   }
 });
 

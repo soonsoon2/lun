@@ -53,6 +53,7 @@ class AcpWorker {
     this.lastError = null;
     this.agentInfo = null;
     this.startedAt = null;
+    this.lastPhase = "cold";
   }
 
   async start() {
@@ -77,6 +78,7 @@ class AcpWorker {
     });
     this.startedAt = Date.now();
     this.ready = false;
+    this.lastPhase = "starting";
 
     this.child.stderr.on("data", chunk => {
       const text = chunk.toString().trim();
@@ -108,6 +110,7 @@ class AcpWorker {
     });
     this.sessionId = session.sessionId;
     this.ready = true;
+    this.lastPhase = "ready";
   }
 
   makeClient() {
@@ -126,6 +129,10 @@ class AcpWorker {
         if (update.sessionUpdate === "agent_message_chunk") {
           const text = contentText(update.content);
           if (text) {
+            if (!this.active.firstChunkAt) {
+              this.active.firstChunkAt = Date.now();
+              this.active.phase = "streaming";
+            }
             this.active.text += text;
             if (this.active.onChunk) this.active.onChunk(this.provider, text);
           }
@@ -154,7 +161,8 @@ class AcpWorker {
 
   run(prompt, { timeout = 120000, onChunk } = {}) {
     return new Promise((resolve, reject) => {
-      this.queue.push({ prompt, timeout, onChunk, resolve, reject, text: "" });
+      this.queue.push({ prompt, timeout, onChunk, resolve, reject, text: "", phase: "queued", createdAt: Date.now(), firstChunkAt: null });
+      if (onChunk) onChunk(this.provider, `[acp:queued] queue=${this.queue.length}`);
       this.pump();
     });
   }
@@ -163,6 +171,8 @@ class AcpWorker {
     if (this.active || !this.queue.length) return;
     const task = this.queue.shift();
     this.active = task;
+    task.startedAt = Date.now();
+    task.phase = "starting";
 
     try {
       await this.start();
@@ -174,6 +184,18 @@ class AcpWorker {
 
   async execute(task) {
     const started = Date.now();
+    task.phase = "session";
+    if (task.onChunk) task.onChunk(this.provider, `[acp:session] preparing fresh ACP session`);
+    if (process.env.LUN_ACP_REUSE_SESSION !== "1") {
+      const session = await this.connection.newSession({
+        cwd: this.cwd,
+        mcpServers: [],
+      });
+      this.sessionId = session.sessionId;
+    }
+
+    task.phase = "prompt";
+    if (task.onChunk) task.onChunk(this.provider, `[acp:prompt] sent to ${this.provider} (${this.model})`);
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -190,6 +212,7 @@ class AcpWorker {
       if (timedOut || this.active !== task) return;
 
       this.runs += 1;
+      this.lastPhase = result?.stopReason || "done";
       this.finish(task, null, {
         text: task.text.trim(),
         elapsed: parseFloat(((Date.now() - started) / 1000).toFixed(1)),
@@ -203,6 +226,7 @@ class AcpWorker {
     } catch (err) {
       clearTimeout(timer);
       if (!timedOut) {
+        this.lastPhase = "error";
         this.restart();
         throw err;
       }
@@ -214,6 +238,7 @@ class AcpWorker {
     this.active = null;
     if (err) {
       this.lastError = err.message;
+      this.lastPhase = "error";
       task.reject(err);
     } else {
       task.resolve(result);
@@ -223,6 +248,7 @@ class AcpWorker {
 
   restart() {
     this.ready = false;
+    this.lastPhase = "restarting";
     this.connection = null;
     if (this.child && !this.child.killed) {
       try { this.child.kill(); } catch {}
@@ -251,9 +277,14 @@ class AcpWorker {
       busy: !!this.active,
       runs: this.runs,
       lastError: this.lastError,
+      phase: this.active?.phase || this.lastPhase,
+      activeElapsedSec: this.active?.startedAt ? parseFloat(((Date.now() - this.active.startedAt) / 1000).toFixed(1)) : 0,
+      activeChars: this.active?.text?.length || 0,
       agent: this.agentInfo?.title || this.agentInfo?.name || null,
       uptimeSec: this.startedAt ? Math.round((Date.now() - this.startedAt) / 1000) : 0,
-      note: "persistent ACP worker; process stays warm and prompts reuse one session",
+      note: process.env.LUN_ACP_REUSE_SESSION === "1"
+        ? "persistent ACP worker; process and session stay warm"
+        : "persistent ACP worker; process stays warm and each prompt gets a fresh ACP session",
     };
   }
 }
