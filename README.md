@@ -11,8 +11,9 @@
 > Not sure about that AI answer?
 > Ask multiple agents at once and compare.
 
-[![npm](https://img.shields.io/npm/v/lun?style=flat-square)](https://www.npmjs.com/package/lun)
+[![GitHub](https://img.shields.io/badge/install-github-181717?style=flat-square&logo=github)](https://github.com/soonsoon2/lun)
 [![license](https://img.shields.io/github/license/soonsoon2/lun?style=flat-square)](LICENSE)
+[![site](https://img.shields.io/badge/site-lun.soonsoon.io-74e39b?style=flat-square)](https://lun.soonsoon.io)
 
 ---
 
@@ -62,8 +63,10 @@ Lun makes this a 10-second habit instead of a 10-minute tab-switching ritual.
 
 ## Install
 
+Install straight from GitHub:
+
 ```bash
-npm install -g lun
+npm install -g github:soonsoon2/lun
 ```
 
 You need at least one AI agent CLI installed:
