@@ -247,17 +247,36 @@ Setup:
 
 ---
 
+## Workspace
+
+Lun keeps everything you might want to see in one folder — the **workspace**,
+at `~/Documents/lun-workspace` by default (set it in `lun --init`):
+
+```
+~/Documents/lun-workspace/
+├── run/        # where agents actually run (kept empty/small so kiro & codex stay fast)
+├── sessions/   # every conversation, saved as .md + .json
+├── logs/       # daemon + usage logs
+└── reports/    # full per-agent reports from PM chat
+```
+
+Why a dedicated `run/` folder? kiro and codex scan their working directory on
+startup. Running them from a huge `$HOME` made kiro ~3-4x slower. The isolated
+`run/` dir keeps them fast no matter where you invoke `lun`. To make agents
+operate on a real project instead, run from that project with `LUN_USE_CWD=1`.
+
 ## Sessions
 
-Every conversation is auto-saved to `~/.lun/sessions/` as both `.md` (human-readable) and `.json` (machine-parseable).
+Every conversation is auto-saved to `<workspace>/sessions/` as both `.md`
+(human-readable) and `.json` (machine-parseable).
 
 ```bash
 # View recent sessions
 lun --sessions
 
-# Sessions are at:
-~/.lun/sessions/2026-05-09T15-30-22.md
-~/.lun/sessions/2026-05-09T15-30-22.json
+# Sessions are at, e.g.:
+~/Documents/lun-workspace/sessions/2026-05-09T15-30-22.md
+~/Documents/lun-workspace/sessions/2026-05-09T15-30-22.json
 ```
 
 ---
@@ -370,10 +389,13 @@ Stored at `~/.lun/config.json`:
   "pmModel": "sonnet",
   "moderator": "copilot",
   "timeout": 120,
-  "workDir": "~/Documents/lun-workspace",
-  "sessionsPath": "~/.lun/sessions"
+  "workDir": "~/Documents/lun-workspace"
 }
 ```
+
+`workDir` is the workspace root (see [Workspace](#workspace)). Sessions, logs,
+and reports live inside it by default; set `sessionsPath` only if you want
+sessions stored somewhere else.
 
 ### Environment Variables
 
