@@ -7,22 +7,12 @@ import { join } from "path";
 export const LUN_DIR = join(process.env.HOME, ".lun");
 export const CONFIG_PATH = join(LUN_DIR, "config.json");
 
-// Default agent working directory — lives under the user's Documents folder.
-// Agents (especially kiro/codex) scan their cwd on startup, so running them
-// in a dedicated, mostly-empty folder keeps them fast no matter where the
-// user invokes `lun` from. Configurable via config.workDir.
+// The lun workspace lives under the user's Documents folder and holds
+// everything the user might want to see: agent run dir, sessions, logs,
+// reports. Configurable via config.workDir.
 export const DEFAULT_WORK_DIR = join(process.env.HOME, "Documents", "lun-workspace");
 
-// Sessions dir is configurable via config.sessionsPath
-export function getSessionsDir() {
-  const config = loadConfig();
-  return config?.sessionsPath || join(LUN_DIR, "sessions");
-}
-
-/**
- * The directory agents run in. Defaults to ~/Documents/lun-workspace.
- * Created on demand so it always exists when an agent spawns.
- */
+/** Workspace root (config.workDir). Created on demand. */
 export function getWorkDir() {
   const config = loadConfig();
   const dir = config?.workDir || DEFAULT_WORK_DIR;
@@ -33,11 +23,43 @@ export function ensureWorkDir(dir = DEFAULT_WORK_DIR) {
   try {
     mkdirSync(dir, { recursive: true });
   } catch {
-    // If the configured dir can't be created (e.g. permissions), fall back
-    // to the lun home so agents still have a small, stable place to run.
     try { mkdirSync(LUN_DIR, { recursive: true }); } catch {}
     return LUN_DIR;
   }
+  return dir;
+}
+
+/**
+ * Directory where agents actually run (their cwd). Kept as an isolated,
+ * mostly-empty subfolder of the workspace so kiro/codex stay fast — logs and
+ * sessions live elsewhere in the workspace and never pollute it.
+ */
+export function getRunDir() {
+  const dir = join(getWorkDir(), "run");
+  try { mkdirSync(dir, { recursive: true }); } catch {}
+  return dir;
+}
+
+/** Logs (daemon.log, usage.ndjson, daemon.json) live under the workspace. */
+export function getLogsDir() {
+  const dir = join(getWorkDir(), "logs");
+  try { mkdirSync(dir, { recursive: true }); } catch {}
+  return dir;
+}
+
+/** Full agent reports live under the workspace. */
+export function getReportsDir() {
+  const dir = join(getWorkDir(), "reports");
+  try { mkdirSync(dir, { recursive: true }); } catch {}
+  return dir;
+}
+
+// Sessions dir — defaults to <workspace>/sessions, override via config.sessionsPath
+export function getSessionsDir() {
+  const config = loadConfig();
+  if (config?.sessionsPath) return config.sessionsPath;
+  const dir = join(getWorkDir(), "sessions");
+  try { mkdirSync(dir, { recursive: true }); } catch {}
   return dir;
 }
 
@@ -74,6 +96,11 @@ function normalizeConfig(config) {
   if (next.pmAgent === "gemini") next.pmAgent = "agy";
   if (next.moderator === "gemini") next.moderator = "agy";
 
+  // Legacy default sessionsPath pointed at ~/.lun/sessions. Drop it so sessions
+  // now live in the workspace alongside logs/reports. A custom path is kept.
+  const legacySessions = join(LUN_DIR, "sessions");
+  if (next.sessionsPath === legacySessions) delete next.sessionsPath;
+
   return next;
 }
 
@@ -88,7 +115,6 @@ export function defaultConfig() {
     providers: ["kiro", "claude", "copilot"],
     models: { kiro: "auto", claude: "sonnet", copilot: "auto", agy: "auto" },
     timeout: 120,
-    sessionsPath: join(LUN_DIR, "sessions"),
     workDir: DEFAULT_WORK_DIR,
     moderator: "claude",
     autoDiscuss: {

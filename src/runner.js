@@ -5,7 +5,7 @@ import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
-import { getWorkDir } from "./config.js";
+import { getRunDir } from "./config.js";
 import { runCodexSDK } from "./codex-sdk-runner.js";
 import { runClaudeWorker } from "./claude-worker.js";
 import { runAcpWorker, supportsAcpWorker } from "./acp-worker.js";
@@ -76,7 +76,7 @@ export function runProvider(providerId, prompt, options = {}) {
   // where `lun` was invoked. An explicit cwd (e.g. from the web/daemon API)
   // still wins. Override with LUN_USE_CWD=1 to use the actual process cwd.
   const effectiveCwd = cwd
-    || (process.env.LUN_USE_CWD === "1" ? process.cwd() : getWorkDir());
+    || (process.env.LUN_USE_CWD === "1" ? process.cwd() : getRunDir());
 
   // Codex fast path: use the SDK so the CLI process is reused across turns.
   // Cuts cold-start floor from ~5s to ~3-4s on follow-up turns.

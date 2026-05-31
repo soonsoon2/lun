@@ -12,7 +12,7 @@ import { moderatedQuery, detectIntent, discuss, synthesize } from "./src/moderat
 import { chatTurn } from "./src/lun-agent.js";
 import { handleLargePrompt } from "./src/large-prompt.js";
 import { Session } from "./src/session.js";
-import { loadConfig, defaultConfig, getSessionsDir, saveConfig, getWorkDir } from "./src/config.js";
+import { loadConfig, defaultConfig, getSessionsDir, saveConfig, getRunDir } from "./src/config.js";
 import {
   DAEMON_LOG_PATH,
   DAEMON_STATE_PATH,
@@ -92,9 +92,9 @@ function runKiroCmd(args, cwd) {
 
 function normalizeCwd(cwd) {
   const home = process.env.HOME || process.cwd();
-  // When no usable cwd is provided, run agents in the lun work dir (small,
+  // When no usable cwd is provided, run agents in the isolated run dir (small,
   // stable) rather than HOME — HOME is large and slows kiro/codex startup.
-  const fallback = getWorkDir();
+  const fallback = getRunDir();
   if (typeof cwd !== "string") return fallback;
   if (!cwd || cwd === "~") return fallback;
   if (cwd.startsWith("~/")) return join(home, cwd.slice(2));
@@ -151,14 +151,14 @@ function describeAgentDelta(provider, delta) {
 async function prewarmPersistentWorkers() {
   if (!IS_DAEMON || process.env.LUN_PREWARM_WORKERS === "0") return;
   const config = loadConfig() || defaultConfig();
-  const cwd = normalizeCwd(config.defaultCwd || getWorkDir());
+  const cwd = normalizeCwd(config.defaultCwd || getRunDir());
   const providers = (config.providers || Object.keys(PROVIDERS)).filter(provider => PROVIDERS[provider] && checkAvailable(provider));
   return prewarmProviders(providers, config, cwd);
 }
 
 async function prewarmProviders(providers, config = null, cwd = null) {
   config = config || loadConfig() || defaultConfig();
-  cwd = cwd || normalizeCwd(config.defaultCwd || getWorkDir());
+  cwd = cwd || normalizeCwd(config.defaultCwd || getRunDir());
   for (const provider of providers) {
     const model = config.models?.[provider] || PROVIDERS[provider]?.defaultModel;
     try {

@@ -3,11 +3,15 @@
 ## [Unreleased]
 
 ### Added
-- **Dedicated agent work directory** (`config.workDir`, default
-  `~/Documents/lun-workspace`). Agents now run there instead of `$HOME`, so
-  kiro/codex stay fast no matter where `lun` is invoked (kiro cold start
-  ~23s → ~6s when called from a large home directory). Set in `lun --init`,
-  override per-run with `LUN_USE_CWD=1`.
+- **Unified workspace** (`config.workDir`, default `~/Documents/lun-workspace`).
+  Everything the user might want to see lives here:
+  - `run/` — isolated, mostly-empty dir where agents actually run, so
+    kiro/codex stay fast (kiro cold start ~23s → ~6s from a large `$HOME`).
+  - `sessions/`, `logs/`, `reports/` — conversation history, daemon/usage
+    logs, and full agent reports.
+
+  Set in `lun --init`; override per-run with `LUN_USE_CWD=1`. The daemon state
+  pointer stays in `~/.lun` as runtime plumbing.
 - **LICENSE** file (MIT) — previously declared but missing.
 - **Open-source governance**: `CONTRIBUTING.md`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md`, GitHub issue/PR templates.

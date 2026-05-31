@@ -13,7 +13,7 @@
  *   shutdownCodexSDK()
  */
 import { Codex } from "@openai/codex-sdk";
-import { getWorkDir } from "./config.js";
+import { getRunDir } from "./config.js";
 
 // One Codex client per process; threads are keyed by caller-provided sessionKey.
 const codex = new Codex();
@@ -40,7 +40,7 @@ export async function runCodexSDK(prompt, options = {}) {
   const {
     sessionKey = "default",
     model,
-    cwd = getWorkDir(),
+    cwd = getRunDir(),
     timeout = 120000,
     onChunk,
   } = options;
@@ -152,7 +152,7 @@ export function prewarmCodexSDK(options = {}) {
   const {
     sessionKey = "default",
     model,
-    cwd = getWorkDir(),
+    cwd = getRunDir(),
   } = options;
   getOrCreateThread(sessionKey, { model, cwd });
   return getCodexSDKStatuses().find(status => status.sessionKey === sessionKey) || null;

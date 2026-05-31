@@ -1,16 +1,21 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { estimateCost } from "./pricing.js";
+import { getLogsDir, getReportsDir, LUN_DIR } from "./config.js";
 
-const HOME = process.env.HOME || process.cwd();
-export const LUN_DIR = join(HOME, ".lun");
-export const USAGE_LOG_PATH = join(LUN_DIR, "usage.ndjson");
-export const DAEMON_LOG_PATH = join(LUN_DIR, "daemon.log");
+// User-facing history (logs, usage, reports) lives in the workspace so it's
+// easy to find. The daemon *state* pointer stays in ~/.lun because it's
+// runtime plumbing every `lun` invocation reads to locate a running daemon.
+const LOGS_DIR = getLogsDir();
+export const USAGE_LOG_PATH = join(LOGS_DIR, "usage.ndjson");
+export const DAEMON_LOG_PATH = join(LOGS_DIR, "daemon.log");
 export const DAEMON_STATE_PATH = join(LUN_DIR, "daemon.json");
-export const REPORTS_DIR = join(LUN_DIR, "reports");
+export const REPORTS_DIR = getReportsDir();
+
+// Re-exported for backward compatibility (was defined here previously).
+export { LUN_DIR };
 
 mkdirSync(LUN_DIR, { recursive: true });
-mkdirSync(REPORTS_DIR, { recursive: true });
 
 function appendNdjson(path, event) {
   appendFileSync(path, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
