@@ -428,7 +428,10 @@ async function cmdServe() {
 
   const child = spawnChild("node", [serverPath], {
     stdio: "inherit",
-    env: { ...process.env, LUN_PORT: String(port) },
+    // LUN_DAEMON=1 makes serve a live Lun environment: workers are prewarmed
+    // and stay warm for as long as the web UI process is running.
+    // LUN_SERVE=1 enables browser-lifecycle shutdown (close tab => exit).
+    env: { ...process.env, LUN_PORT: String(port), LUN_DAEMON: "1", LUN_SERVE: "1" },
   });
 
   child.on("error", (err) => {

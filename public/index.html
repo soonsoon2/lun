@@ -212,6 +212,77 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .dash-table tr:last-child td{border-bottom:none}
 .dash-path{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);word-break:break-all}
 .dash-empty{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);padding:24px 0;text-align:center}
+
+/* Control panel: settings + agents */
+.dash-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.dash-title{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary);text-transform:lowercase}
+.dash-sub{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);font-weight:400;margin-left:8px}
+.dash-note{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin:-6px 0 4px}
+
+.ctl-btn{font-family:var(--font-mono);font-size:11px;padding:5px 12px;border:1px solid var(--border);border-radius:5px;background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;transition:all 120ms}
+.ctl-btn:hover:not(:disabled){border-color:var(--border-strong);color:var(--text-primary)}
+.ctl-btn:disabled{opacity:.4;cursor:not-allowed}
+.ctl-btn.sm{padding:3px 9px;font-size:10px}
+.ctl-btn.primary{border-color:var(--kiro);color:var(--kiro)}
+.ctl-btn.primary:hover:not(:disabled){background:rgba(167,139,250,0.08)}
+
+.adot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);display:inline-block;flex:none}
+.adot.on{background:var(--success);box-shadow:0 0 6px rgba(74,222,128,.5)}
+.adot.load{background:var(--warning);animation:pulse 1.2s ease-in-out infinite}
+.adot.off{background:var(--text-disabled)}
+.adot.demand{background:var(--info);box-shadow:0 0 6px rgba(96,165,250,.4)}
+
+.agent-list{display:flex;flex-direction:column;gap:6px}
+.agent-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-elevated);border-left:2px solid var(--border)}
+.agent-row.kiro{border-left-color:var(--kiro)}
+.agent-row.claude{border-left-color:var(--claude)}
+.agent-row.copilot{border-left-color:var(--copilot)}
+.agent-row.agy,.agent-row.gemini{border-left-color:var(--agy)}
+.agent-row.codex{border-left-color:var(--codex)}
+.agent-id{display:flex;align-items:center;gap:8px;min-width:160px}
+.agent-id .aname{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)}
+.agent-id .amodel{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.agent-meta{flex:1;display:flex;gap:14px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);flex-wrap:wrap}
+.agent-meta .atag{color:var(--text-muted);border:1px solid var(--border-subtle);border-radius:3px;padding:1px 6px}
+.agent-meta .astat{text-transform:uppercase;letter-spacing:.04em}
+.agent-meta .ahint{color:var(--text-disabled);font-style:italic}
+
+.set-card{border:1px solid var(--border);border-radius:8px;background:var(--bg-elevated);padding:16px;display:flex;flex-direction:column;gap:10px}
+.set-card-h{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text-primary)}
+.set-row{display:flex;align-items:center;gap:12px}
+.set-row label{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);min-width:90px;display:flex;align-items:center;gap:6px}
+.set-row label.kiro{color:var(--kiro)}.set-row label.claude{color:var(--claude)}.set-row label.copilot{color:var(--copilot)}.set-row label.agy{color:var(--agy)}.set-row label.codex{color:var(--codex)}
+.set-row select{flex:1;max-width:340px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-family:var(--font-mono);font-size:12px;padding:7px 10px;cursor:pointer}
+.set-row select:focus{outline:none;border-color:var(--border-strong)}
+.set-actions{display:flex;align-items:center;gap:12px;margin-top:4px}
+.set-msg{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.set-msg.ok{color:var(--success)}.set-msg.err{color:var(--error)}
+.set-note{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+
+/* Mode control bars (above chips) */
+.mode-ctl{display:flex;align-items:center;gap:14px;max-width:760px;margin:0 auto 8px;flex-wrap:wrap}
+.mode-ctl label{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px}
+.mode-ctl select{background:var(--bg-input);border:1px solid var(--border);border-radius:5px;color:var(--text-primary);font-family:var(--font-mono);font-size:11px;padding:4px 8px;cursor:pointer}
+.mode-ctl label.toggle{color:var(--text-secondary);cursor:pointer}
+.mode-ctl .ctl-hint{font-family:var(--font-mono);font-size:10px;color:var(--text-disabled)}
+
+/* "full" affordance on agent messages */
+.msg-header .open-full{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);cursor:pointer;border:1px solid var(--border-subtle);border-radius:3px;padding:0 5px;opacity:0;transition:opacity 120ms}
+.msg:hover .open-full{opacity:1}
+.msg-header .open-full:hover{color:var(--text-primary);border-color:var(--border)}
+
+/* Answer modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(5,5,8,.7);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px)}
+.modal{width:min(720px,92vw);max-height:82vh;background:var(--bg-overlay);border:1px solid var(--border-strong);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-subtle)}
+.am-title{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)}
+.am-title.kiro{color:var(--kiro)}.am-title.claude{color:var(--claude)}.am-title.copilot{color:var(--copilot)}.am-title.agy{color:var(--agy)}.am-title.codex{color:var(--codex)}
+.modal-x{background:none;border:none;color:var(--text-muted);font-size:22px;line-height:1;cursor:pointer;padding:0 4px}
+.modal-x:hover{color:var(--text-primary)}
+.modal-body{padding:18px;overflow-y:auto;font-size:14px;line-height:1.7;color:var(--text-primary)}
+.modal-body pre{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:12px;overflow-x:auto}
+.modal-body code{font-family:var(--font-mono);font-size:12px}
+
 </style>
 </head>
 <body>
@@ -242,12 +313,13 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
     <div class="main-toolbar">
       <div class="crumbs"><span id="crumbMode">chat</span><span class="sep">/</span><span id="crumbAgents">all agents</span></div>
       <div class="pills">
-        <button class="mode-pill active" data-mode="chat">chat</button>
-        <button class="mode-pill" data-mode="discuss">discuss</button>
+        <button class="mode-pill active" data-mode="lun">lun</button>
         <button class="mode-pill" data-mode="ask">ask</button>
-        <button class="mode-pill" data-mode="workers">workers</button>
+        <button class="mode-pill" data-mode="discuss">discuss</button>
+        <button class="mode-pill" data-mode="workers">agents</button>
         <button class="mode-pill" data-mode="usage">usage</button>
         <button class="mode-pill" data-mode="logs">logs</button>
+        <button class="mode-pill" data-mode="settings">settings</button>
       </div>
     </div>
 
@@ -263,6 +335,37 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
     </div>
 
     <div class="input-area" id="inputArea">
+      <div class="mode-ctl" id="discussCtl" style="display:none">
+        <label>style
+          <select id="dTechnique">
+            <option value="auto">auto (PM picks)</option>
+            <option value="debate">debate</option>
+            <option value="devils_advocate">devil's advocate</option>
+            <option value="build">build &amp; extend</option>
+          </select>
+        </label>
+        <label>rounds
+          <select id="dRounds">
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="5">5</option>
+            <option value="0">unlimited</option>
+          </select>
+        </label>
+        <label>max time
+          <select id="dTime">
+            <option value="60">60s</option>
+            <option value="120" selected>120s</option>
+            <option value="300">5m</option>
+            <option value="0">none</option>
+          </select>
+        </label>
+        <button class="ctl-btn sm" id="stopBtn" style="display:none">stop</button>
+      </div>
+      <div class="mode-ctl" id="lunCtl">
+        <label class="toggle"><input type="checkbox" id="lunDetailed"> detailed report</label>
+        <span class="ctl-hint">Lun consults the panel and replies with a synthesis. Click any agent answer to see it in full.</span>
+      </div>
       <div class="chips" id="chips"></div>
       <div id="attachments"></div>
       <div class="cmd-row">
@@ -278,9 +381,16 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
   </main>
 </div>
 
+<div class="modal-overlay" id="answerModal" style="display:none">
+  <div class="modal">
+    <div class="modal-head"><span class="am-title" id="amTitle"></span><button class="modal-x" id="amClose">×</button></div>
+    <div class="modal-body" id="amBody"></div>
+  </div>
+</div>
+
 <script>
 const chat=document.getElementById("chat"),chatInner=document.getElementById("chatInner"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),statusDot=document.getElementById("statusDot"),sessList=document.getElementById("sessList"),crumbMode=document.getElementById("crumbMode"),inputArea=document.getElementById("inputArea");
-let ws=null,waiting=false,composing=false,mode="chat";
+let ws=null,waiting=false,composing=false,mode="lun";
 const AG={kiro:"kiro",claude:"claude",copilot:"copilot",agy:"agy",codex:"codex",cline:"cline"};
 let activeAgents=new Set();
 
@@ -289,12 +399,18 @@ document.querySelectorAll(".mode-pill").forEach(p=>p.addEventListener("click",()
   document.querySelectorAll(".mode-pill").forEach(x=>x.classList.remove("active"));
   p.classList.add("active");
   mode=p.dataset.mode;
-  crumbMode.textContent=mode;
-  inputArea.style.display=(mode==="usage"||mode==="logs"||mode==="workers")?"none":"block";
-  inp.placeholder=mode==="chat"?"chat with PM...":mode==="discuss"?"start a discussion...":"ask all agents...";
+  crumbMode.textContent=mode==="workers"?"agents":mode;
+  const isPanel=(mode==="usage"||mode==="logs"||mode==="workers"||mode==="settings");
+  inputArea.style.display=isPanel?"none":"block";
+  inp.placeholder=mode==="lun"?"ask Lun anything — it consults the panel for you...":mode==="discuss"?"a question for the panel to debate...":"ask all agents the same question...";
+  // mode-specific control bar
+  const dc=document.getElementById("discussCtl"), lc=document.getElementById("lunCtl");
+  if(dc)dc.style.display=mode==="discuss"?"flex":"none";
+  if(lc)lc.style.display=mode==="lun"?"flex":"none";
   if(mode==="workers")renderWorkers();
   if(mode==="usage")renderUsage();
   if(mode==="logs")renderLogs();
+  if(mode==="settings")renderSettings();
 }));
 
 function el(t,c){const e=document.createElement("div");if(c)e.className=c;return e}
@@ -319,8 +435,18 @@ function addAgent(provider,text,elapsed,model){
   const m=el("div",`msg ${provider}`);
   const time=elapsed?`${elapsed}s`:"";
   const meta=[model||"",time].filter(Boolean).join(" · ");
-  m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">${provider}/${model||"auto"}</span></div><div class="msg-body">${md(text||"(no response)")}</div>${meta?`<div class="msg-meta">${esc(meta)}</div>`:""}</div>`;
+  const full=text||"(no response)";
+  m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">${provider}/${model||"auto"}</span><span class="open-full" title="open full answer">⤢ full</span></div><div class="msg-body">${md(full)}</div>${meta?`<div class="msg-meta">${esc(meta)}</div>`:""}</div>`;
+  m.querySelector(".open-full")?.addEventListener("click",()=>openAnswer(provider,model,full,elapsed));
   chatInner.appendChild(m);scroll();
+}
+
+function openAnswer(provider,model,text,elapsed){
+  const ov=document.getElementById("answerModal");
+  document.getElementById("amTitle").textContent=`${provider} / ${model||"auto"}${elapsed?` · ${elapsed}s`:""}`;
+  document.getElementById("amBody").innerHTML=md(text||"");
+  document.getElementById("amTitle").className="am-title "+provider;
+  ov.style.display="flex";
 }
 
 function addPM(text,elapsed,model){
@@ -369,6 +495,7 @@ async function openSession(id){
   }catch{}}
 
 function fmtMs(ms){return ms===0?"0.00s":ms?`${(ms/1000).toFixed(ms>=10000?1:2)}s`:"-"}
+function fmtCost(usd){if(usd==null)return "-";if(usd===0)return "$0";if(usd<0.01)return "<$0.01";return "$"+usd.toFixed(usd<1?3:2)}
 function fmtTime(ts){try{return new Date(ts).toLocaleString()}catch{return ts||""}}
 
 async function renderUsage(){
@@ -387,10 +514,12 @@ async function renderUsage(){
         <div class="metric"><div class="k">ok</div><div class="v">${t.ok||0}</div></div>
         <div class="metric"><div class="k">errors</div><div class="v">${t.errors||0}</div></div>
         <div class="metric"><div class="k">avg</div><div class="v">${fmtMs(t.avgLatencyMs)}</div></div>
+        <div class="metric"><div class="k">est. cost</div><div class="v">${fmtCost(t.costUsd)}</div></div>
       </div>
+      <div class="dash-note">Cost is a rough estimate (~4 chars/token × published model rates), not real billing.</div>
       <div class="dash-path">${esc(daemon.paths?.usage||usage.path||"")}</div>
-      ${providers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>runs</th><th>ok</th><th>err</th><th>avg</th><th>chars</th><th>model</th></tr></thead><tbody>${providers.map(p=>`<tr><td>${esc(p.provider)}</td><td>${p.count}</td><td>${p.ok}</td><td>${p.errors}</td><td>${fmtMs(p.avgLatencyMs)}</td><td>${p.inputChars}/${p.outputChars}</td><td>${esc(p.lastModel||"auto")}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no provider runs yet</div>`}
-      ${recent.length?`<table class="dash-table"><thead><tr><th>time</th><th>mode</th><th>provider</th><th>status</th><th>latency</th><th>output</th></tr></thead><tbody>${recent.slice(0,20).map(r=>`<tr><td>${esc(fmtTime(r.ts))}</td><td>${esc(r.mode||"")}</td><td>${esc(r.provider||"")}</td><td>${esc(r.status||"")}</td><td>${fmtMs(r.latencyMs)}</td><td>${r.outputChars||0}</td></tr>`).join("")}</tbody></table>`:""}
+      ${providers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>runs</th><th>ok</th><th>err</th><th>avg</th><th>in/out chars</th><th>est. cost</th><th>model</th></tr></thead><tbody>${providers.map(p=>`<tr><td>${esc(p.provider)}</td><td>${p.count}</td><td>${p.ok}</td><td>${p.errors}</td><td>${fmtMs(p.avgLatencyMs)}</td><td>${p.inputChars}/${p.outputChars}</td><td>${fmtCost(p.costUsd)}</td><td>${esc(p.lastModel||"auto")}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no provider runs yet</div>`}
+      ${recent.length?`<table class="dash-table"><thead><tr><th>time</th><th>mode</th><th>provider</th><th>status</th><th>latency</th><th>output</th><th>est. cost</th></tr></thead><tbody>${recent.slice(0,20).map(r=>`<tr><td>${esc(fmtTime(r.ts))}</td><td>${esc(r.mode||"")}</td><td>${esc(r.provider||"")}</td><td>${esc(r.status||"")}</td><td>${fmtMs(r.latencyMs)}</td><td>${r.outputChars||0}</td><td>${fmtCost(r.costUsd)}</td></tr>`).join("")}</tbody></table>`:""}
     </div>`;
   }catch(e){
     chatInner.innerHTML=`<div class="dash-empty">usage unavailable</div>`;
@@ -415,16 +544,126 @@ async function renderLogs(){
 
 async function renderWorkers(){
   hide();
-  chatInner.innerHTML='<div class="dash-empty">loading workers...</div>';
+  chatInner.innerHTML='<div class="dash-empty">loading agents...</div>';
   try{
     const r=await fetch("/api/workers");
     const d=await r.json();
     const workers=d.workers||[];
+    const warmCount=workers.filter(w=>w.alive&&w.ready).length;
     chatInner.innerHTML=`<div class="dash">
-      ${workers.length?`<table class="dash-table"><thead><tr><th>provider</th><th>model</th><th>protocol</th><th>persistent</th><th>alive</th><th>ready</th><th>busy</th><th>queued</th><th>runs</th><th>session</th></tr></thead><tbody>${workers.map(w=>`<tr><td>${esc(w.provider||"")}</td><td>${esc(w.model||"")}</td><td>${esc(w.protocol||"")}</td><td>${w.persistent?"yes":"no"}</td><td>${w.alive?"yes":"no"}</td><td>${w.ready?"yes":"no"}</td><td>${w.busy?"yes":"no"}</td><td>${w.queued??""}</td><td>${w.runs??""}</td><td>${esc((w.sessionId||"").slice(0,12))}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no workers yet</div>`}
+      <div class="dash-head">
+        <div class="dash-title">agents <span class="dash-sub">${warmCount}/${workers.length} warm</span></div>
+        <button class="ctl-btn" id="restartAll">restart all</button>
+      </div>
+      ${workers.length?`<div class="agent-list">${workers.map(w=>{
+        const installed=w.ready||w.alive;
+        let state, stateCls, hint;
+        if(!installed){ state="not installed"; stateCls="off"; hint="executable not found on PATH"; }
+        else if(w.protocol==="spawn-per-turn"){ state="on-demand"; stateCls="demand"; hint="no warm mode — spawns fresh each call (normal)"; }
+        else if(w.alive&&w.ready){ state="warm"; stateCls="on"; hint=""; }
+        else if(w.alive){ state="starting"; stateCls="load"; hint=""; }
+        else { state="cold"; stateCls="off"; hint="starts on first request"; }
+        const canRestart=installed&&w.protocol!=="spawn-per-turn";
+        return `<div class="agent-row ${esc(w.provider)}">
+          <div class="agent-id"><span class="adot ${stateCls}"></span><span class="aname">${esc(w.provider)}</span><span class="amodel">${esc(w.model||"auto")}</span></div>
+          <div class="agent-meta">
+            <span class="atag">${esc(w.protocol||"")}</span>
+            <span class="astat">${state}</span>
+            <span>${w.runs??0} runs</span>
+            <span>${w.busy?"busy":(w.queued?w.queued+" queued":"idle")}</span>
+            ${hint?`<span class="ahint">${esc(hint)}</span>`:""}
+          </div>
+          ${canRestart?`<button class="ctl-btn sm" data-restart="${esc(w.provider)}">restart</button>`:`<button class="ctl-btn sm" disabled>—</button>`}
+        </div>`;
+      }).join("")}</div>`:`<div class="dash-empty">no agents configured</div>`}
     </div>`;
+    document.getElementById("restartAll")?.addEventListener("click",()=>restartWorker(null));
+    document.querySelectorAll("[data-restart]").forEach(b=>b.addEventListener("click",()=>restartWorker(b.dataset.restart)));
   }catch(e){
-    chatInner.innerHTML=`<div class="dash-empty">workers unavailable</div>`;
+    chatInner.innerHTML=`<div class="dash-empty">agents unavailable</div>`;
+  }
+}
+
+async function restartWorker(provider){
+  const label=provider||"all";
+  const btns=document.querySelectorAll(".ctl-btn");
+  btns.forEach(b=>b.disabled=true);
+  try{
+    await fetch("/api/workers/restart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(provider?{provider}:{})});
+    await new Promise(r=>setTimeout(r,600));
+    renderWorkers();
+  }catch{
+    btns.forEach(b=>b.disabled=false);
+    alert("restart "+label+" failed");
+  }
+}
+
+async function renderSettings(){
+  hide();
+  chatInner.innerHTML='<div class="dash-empty">loading settings...</div>';
+  try{
+    const r=await fetch("/api/config");
+    const d=await r.json();
+    const cfg=d.config||{};
+    const provs=d.providers||[];
+    const installed=provs.filter(p=>p.available);
+    const pmOptions=installed.map(p=>`<option value="${esc(p.id)}" ${cfg.pmAgent===p.id?"selected":""}>${esc(p.id)}</option>`).join("");
+    const pmAgentDef=provs.find(p=>p.id===cfg.pmAgent);
+    const pmModelOptions=(pmAgentDef?.models||[]).map(m=>`<option value="${esc(m.id)}" ${cfg.pmModel===m.id?"selected":""}>${esc(m.label||m.id)}</option>`).join("");
+    chatInner.innerHTML=`<div class="dash">
+      <div class="dash-title">settings</div>
+
+      <div class="set-card">
+        <div class="set-card-h">PM agent <span class="dash-sub">hosts chat, routes work, synthesizes</span></div>
+        <div class="set-row">
+          <label>agent</label>
+          <select id="setPmAgent">${pmOptions}</select>
+        </div>
+        <div class="set-row">
+          <label>model</label>
+          <select id="setPmModel">${pmModelOptions||'<option value="auto">auto</option>'}</select>
+        </div>
+      </div>
+
+      <div class="set-card">
+        <div class="set-card-h">default model per agent <span class="dash-sub">used when this agent runs</span></div>
+        ${installed.map(p=>`<div class="set-row">
+          <label class="${esc(p.id)}"><span class="adot on"></span>${esc(p.id)}</label>
+          <select data-model="${esc(p.id)}">${(p.models||[]).map(m=>`<option value="${esc(m.id)}" ${p.selectedModel===m.id?"selected":""}>${esc(m.label||m.id)}</option>`).join("")||`<option value="${esc(p.selectedModel||'auto')}">${esc(p.selectedModel||'auto')}</option>`}</select>
+        </div>`).join("")}
+      </div>
+
+      ${provs.some(p=>!p.available)?`<div class="set-note">not installed: ${provs.filter(p=>!p.available).map(p=>esc(p.id)).join(", ")}</div>`:""}
+
+      <div class="set-actions">
+        <button class="ctl-btn primary" id="saveSettings">save</button>
+        <span id="saveMsg" class="set-msg"></span>
+      </div>
+    </div>`;
+
+    // When PM agent changes, refresh its model dropdown
+    document.getElementById("setPmAgent")?.addEventListener("change",(e)=>{
+      const sel=provs.find(p=>p.id===e.target.value);
+      const modelSel=document.getElementById("setPmModel");
+      modelSel.innerHTML=(sel?.models||[]).map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join("")||'<option value="auto">auto</option>';
+    });
+
+    document.getElementById("saveSettings")?.addEventListener("click",async()=>{
+      const pmAgent=document.getElementById("setPmAgent")?.value;
+      const pmModel=document.getElementById("setPmModel")?.value;
+      const models={};
+      document.querySelectorAll("[data-model]").forEach(s=>{models[s.dataset.model]=s.value;});
+      const msg=document.getElementById("saveMsg");
+      msg.textContent="saving...";
+      try{
+        const res=await fetch("/api/config",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({pmAgent,pmModel,models})});
+        const j=await res.json();
+        if(j.error){msg.textContent="✕ "+j.error;msg.className="set-msg err";}
+        else{msg.textContent="✓ saved — restart agents to apply model changes";msg.className="set-msg ok";}
+      }catch{msg.textContent="✕ save failed";msg.className="set-msg err";}
+    });
+  }catch(e){
+    chatInner.innerHTML=`<div class="dash-empty">settings unavailable</div>`;
   }
 }
 
@@ -465,7 +704,7 @@ function connect(){
       case"moderator-msg":addPM(msg.text,msg.elapsed);break;
       case"system":addSys(msg.text);break;
       case"discuss-turn":addRoundDivider(msg.turn);break;
-      case"done":waiting=false;statusDot.className="dot on";inp.disabled=false;snd.disabled=false;inp.focus();loadSessions();break;
+      case"done":waiting=false;statusDot.className="dot on";inp.disabled=false;snd.disabled=false;inp.focus();loadSessions();{const sb=document.getElementById("stopBtn");if(sb)sb.style.display="none";}break;
       case"error":waiting=false;statusDot.className="dot on";inp.disabled=false;snd.disabled=false;addSys("error: "+msg.message);break;
     }
   };
@@ -484,7 +723,17 @@ function send(){
   }
 
   addUser(inp.value.trim()+(attachedFiles.length>0?` [${attachedFiles.length} file(s) attached]`:""));
-  ws.send(JSON.stringify({type:"message",text:t,mode:mode,discuss:mode==="discuss",agents:[...activeAgents]}));
+  const payload={type:"message",text:t,mode:mode,discuss:mode==="discuss",agents:[...activeAgents]};
+  if(mode==="lun"){
+    payload.reportStyle=document.getElementById("lunDetailed")?.checked?"detailed":"brief";
+  }
+  if(mode==="discuss"){
+    payload.technique=document.getElementById("dTechnique")?.value||"auto";
+    payload.maxTurns=Number(document.getElementById("dRounds")?.value??3);
+    payload.maxTime=Number(document.getElementById("dTime")?.value??120);
+    const sb=document.getElementById("stopBtn");if(sb)sb.style.display="inline-block";
+  }
+  ws.send(JSON.stringify(payload));
   inp.value="";inp.style.height="22px";
   attachedFiles=[];renderAttachments();
   waiting=true;inp.disabled=true;snd.disabled=true;statusDot.className="dot load";
@@ -536,11 +785,28 @@ chatEl.addEventListener("drop",(e)=>{
   if(e.dataTransfer.files.length>0)handleFiles(e.dataTransfer.files);
 });
 snd.addEventListener("click",send);
+document.getElementById("stopBtn")?.addEventListener("click",()=>{
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:"stop"}));
+  document.getElementById("stopBtn").style.display="none";
+});
+document.getElementById("amClose")?.addEventListener("click",()=>{document.getElementById("answerModal").style.display="none";});
+document.getElementById("answerModal")?.addEventListener("click",(e)=>{if(e.target.id==="answerModal")e.currentTarget.style.display="none";});
+document.addEventListener("keydown",(e)=>{if(e.key==="Escape"){const m=document.getElementById("answerModal");if(m)m.style.display="none";}});
 inp.addEventListener("compositionstart",()=>{composing=true});
 inp.addEventListener("compositionend",()=>{composing=false});
 inp.addEventListener("keydown",(e)=>{if(e.key==="Enter"&&!e.shiftKey&&!composing){e.preventDefault();send()}});
 inp.addEventListener("input",()=>{inp.style.height="22px";inp.style.height=Math.min(inp.scrollHeight,160)+"px"});
 document.getElementById("newBtn").addEventListener("click",()=>{chatInner.innerHTML="";wel.style.display="flex";chatInner.appendChild(wel);if(ws&&ws.readyState===1)ws.close();connect()});
+
+// Browser-lifecycle heartbeat: while this tab is open, keep the Lun
+// environment alive. When the tab closes, heartbeats stop and a serve-mode
+// server shuts itself down after the grace window.
+async function heartbeat(){
+  try{await fetch("/api/heartbeat",{method:"POST",headers:{"content-type":"application/json"},body:"{}"});}catch{}
+}
+heartbeat();
+setInterval(heartbeat,4000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)heartbeat();});
 
 // Init
 connect();loadSessions();loadChips();

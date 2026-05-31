@@ -12,7 +12,7 @@ import { moderatedQuery, detectIntent, discuss, synthesize } from "./src/moderat
 import { chatTurn } from "./src/lun-agent.js";
 import { handleLargePrompt } from "./src/large-prompt.js";
 import { Session } from "./src/session.js";
-import { loadConfig, defaultConfig, getSessionsDir } from "./src/config.js";
+import { loadConfig, defaultConfig, getSessionsDir, saveConfig } from "./src/config.js";
 import {
   DAEMON_LOG_PATH,
   DAEMON_STATE_PATH,
@@ -34,11 +34,38 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
 const HOST = process.env.LUN_HOST || process.env.HOST || "127.0.0.1";
 const IS_DAEMON = process.env.LUN_DAEMON === "1";
+const IS_SERVE = process.env.LUN_SERVE === "1"; // browser-lifecycle mode (close tab => exit)
 const DATA_DIR = join(__dirname, "_data");
 const THREADS_DIR = join(DATA_DIR, "threads");
 const KIRO_SESSIONS_DIR = join(process.env.HOME, ".kiro/sessions/cli");
 let actualPort = PORT;
 const apiChatHistories = new Map();
+
+// --- Browser-lifecycle watchdog (serve mode only) ---
+// The web UI sends heartbeats while a tab is open. If no heartbeat arrives
+// within the grace window, we assume the user closed the app and shut down.
+const SERVE_GRACE_MS = Number(process.env.LUN_SERVE_GRACE_MS || 12000);
+let lastClientPingAt = Date.now();
+let serveWatchdog = null;
+
+function shutdownEverything(reason) {
+  appendDaemonLog("shutting down", { reason });
+  try { shutdownClaudeWorkers(); } catch {}
+  try { shutdownAcpWorkers(); } catch {}
+  try { shutdownManagedAgentWorkers(); } catch {}
+  try { shutdownCodexSDK(); } catch {}
+  process.exit(0);
+}
+
+function startServeWatchdog() {
+  if (!IS_SERVE || serveWatchdog) return;
+  serveWatchdog = setInterval(() => {
+    if (Date.now() - lastClientPingAt > SERVE_GRACE_MS) {
+      shutdownEverything("browser closed (no heartbeat)");
+    }
+  }, 4000);
+  serveWatchdog.unref?.();
+}
 
 mkdirSync(THREADS_DIR, { recursive: true });
 
@@ -123,7 +150,12 @@ async function prewarmPersistentWorkers() {
   const config = loadConfig() || defaultConfig();
   const cwd = normalizeCwd(config.defaultCwd || process.cwd());
   const providers = (config.providers || Object.keys(PROVIDERS)).filter(provider => PROVIDERS[provider] && checkAvailable(provider));
+  return prewarmProviders(providers, config, cwd);
+}
 
+async function prewarmProviders(providers, config = null, cwd = null) {
+  config = config || loadConfig() || defaultConfig();
+  cwd = cwd || normalizeCwd(config.defaultCwd || process.cwd());
   for (const provider of providers) {
     const model = config.models?.[provider] || PROVIDERS[provider]?.defaultModel;
     try {
@@ -389,6 +421,7 @@ app.get("/api/providers", async () => {
 app.get("/api/daemon", async () => {
   return {
     daemon: IS_DAEMON,
+    serve: IS_SERVE,
     pid: process.pid,
     host: HOST,
     port: PORT,
@@ -401,6 +434,15 @@ app.get("/api/daemon", async () => {
       sessions: getSessionsDir(),
     },
   };
+});
+
+// ============================================================
+// API: POST /api/heartbeat — browser-lifecycle keepalive (serve mode)
+// The web UI calls this on an interval while a tab is open.
+// ============================================================
+app.post("/api/heartbeat", async () => {
+  lastClientPingAt = Date.now();
+  return { ok: true, serve: IS_SERVE, graceMs: SERVE_GRACE_MS };
 });
 
 app.get("/api/workers", async () => {
@@ -584,6 +626,7 @@ app.post("/api/query/stream", async (req, reply) => {
 
     const pmAgent = config.pmAgent || "claude";
     const pmModel = config.pmModel || config.models?.[pmAgent];
+    const reportStyle = body.reportStyle === "detailed" ? "detailed" : "brief";
     const history = apiChatHistories.get(sessionId) || [];
     const lastProgressAt = new Map();
 
@@ -607,6 +650,7 @@ app.post("/api/query/stream", async (req, reply) => {
       models: config.models || {},
       cwd,
       timeout,
+      reportStyle,
       onPMThinking: (round) => {
         sendProgress("pm_thinking", pmAgent, `${pmAgent} PM thinking, round ${round + 1}`, { round: round + 1 });
       },
@@ -866,6 +910,99 @@ app.get("/api/provider-models", async () => {
 });
 
 // ============================================================
+// API: GET /api/config — full settings snapshot for the control panel
+// ============================================================
+app.get("/api/config", async () => {
+  const config = loadConfig() || defaultConfig();
+  const providers = [];
+  for (const [id, def] of Object.entries(PROVIDERS)) {
+    const available = checkAvailable(id);
+    providers.push({
+      id,
+      name: def.name,
+      available,
+      defaultModel: def.defaultModel,
+      configured: (config.providers || []).includes(id),
+      selectedModel: config.models?.[id] || def.defaultModel,
+      models: available && def.getModels ? def.getModels() : [],
+    });
+  }
+  return {
+    config: {
+      providers: config.providers || [],
+      models: config.models || {},
+      pmAgent: config.pmAgent || "claude",
+      pmModel: config.pmModel || config.models?.[config.pmAgent || "claude"] || "auto",
+      moderator: config.moderator || config.pmAgent || "claude",
+      timeout: config.timeout || 120,
+      language: config.language || "en",
+    },
+    providers,
+  };
+});
+
+// ============================================================
+// API: POST /api/config — update settings (PM agent, per-agent models, providers)
+// Body: { pmAgent?, pmModel?, models?: {id:model}, providers?: [], timeout? }
+// ============================================================
+app.post("/api/config", async (req, reply) => {
+  const body = req.body || {};
+  const config = loadConfig() || defaultConfig();
+
+  if (typeof body.pmAgent === "string") {
+    if (!PROVIDERS[body.pmAgent]) { reply.code(400); return { error: `unknown pmAgent: ${body.pmAgent}` }; }
+    if (!checkAvailable(body.pmAgent)) { reply.code(400); return { error: `${body.pmAgent} is not installed` }; }
+    config.pmAgent = body.pmAgent;
+    config.moderator = body.pmAgent; // PM doubles as moderator
+  }
+  if (typeof body.pmModel === "string") config.pmModel = body.pmModel;
+  if (body.models && typeof body.models === "object") {
+    config.models = { ...config.models, ...body.models };
+  }
+  if (Array.isArray(body.providers)) {
+    config.providers = body.providers.filter(id => PROVIDERS[id]);
+  }
+  if (Number.isFinite(body.timeout)) config.timeout = body.timeout;
+
+  saveConfig(config);
+  appendDaemonLog("config updated via web", {
+    pmAgent: config.pmAgent, pmModel: config.pmModel, providers: config.providers,
+  });
+  return { ok: true, config };
+});
+
+// ============================================================
+// API: POST /api/workers/restart — restart warm workers (all or one provider)
+// Body: { provider?: "kiro" }  — omit provider to restart everything
+// ============================================================
+app.post("/api/workers/restart", async (req) => {
+  const body = req.body || {};
+  const target = body.provider;
+  const config = loadConfig() || defaultConfig();
+
+  // Simplest correct approach: tear all workers down, then re-prewarm the
+  // requested set. Per-worker surgical restart isn't worth the complexity.
+  shutdownClaudeWorkers();
+  shutdownAcpWorkers();
+  shutdownManagedAgentWorkers();
+  shutdownCodexSDK();
+
+  const all = (config.providers || Object.keys(PROVIDERS)).filter(p => PROVIDERS[p] && checkAvailable(p));
+  const toWarm = target ? all.filter(p => p === target) : all;
+  await prewarmProviders(toWarm, config);
+  appendDaemonLog("workers restarted via web", { target: target || "all", warmed: toWarm });
+  return { ok: true, restarted: target || "all", warmed: toWarm };
+});
+
+// ============================================================
+// API: GET /api/pricing — the cost rate table (for transparency in the UI)
+// ============================================================
+app.get("/api/pricing", async () => {
+  const { RATES, DEFAULT_RATE, CHARS_PER_TOKEN } = await import("./src/pricing.js");
+  return { rates: RATES, defaultRate: DEFAULT_RATE, charsPerToken: CHARS_PER_TOKEN, note: "Estimated USD per 1M tokens [input, output]. Token counts are approximated from characters." };
+});
+
+// ============================================================
 // API: POST /api/moderator
 // ============================================================
 app.post("/api/moderator", async (req) => {
@@ -949,6 +1086,8 @@ app.get("/ws", { websocket: true }, (socket, req) => {
   let providerSessions = { kiro: null, claude: null, copilot: null };
   // PM chat history (for chat mode)
   let chatHistory = [];
+  // Stop signal for long-running discussions (set by a "stop" message).
+  let stopRequested = false;
 
   socket.on("message", (raw) => {
     try {
@@ -1001,6 +1140,12 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           break;
         }
 
+        case "stop": {
+          stopRequested = true;
+          socket.send(JSON.stringify({ type: "system", text: "Stopping after the current turn..." }));
+          break;
+        }
+
         case "message": {
           if (activeChild) {
             socket.send(JSON.stringify({ type: "error", message: "이전 응답이 아직 진행 중입니다" }));
@@ -1009,6 +1154,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
 
           let text = msg.text;
           if (!text) break;
+          stopRequested = false;
           const requestId = randomUUID();
           const mode = provider === "all" ? (msg.mode || (msg.discuss ? "discuss" : "ask")) : "single";
           appendUsageEvent({
@@ -1021,7 +1167,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
           });
           appendDaemonLog("request received", { requestId, sessionId, mode, provider, inputChars: text.length });
 
-          const fastAnswer = mode === "chat" ? localFastPath(text) : null;
+          const fastAnswer = (mode === "chat" || mode === "lun") ? localFastPath(text) : null;
           if (fastAnswer) {
             socket.send(JSON.stringify({ type: "provider-response", provider: "local", text: fastAnswer, elapsed: 0, model: "fast-path" }));
             recordProviderRun({
@@ -1064,11 +1210,13 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             const requestedAgents = msg.agents && msg.agents.length > 0 ? msg.agents : null;
             const availableProviders = Object.keys(PROVIDERS).filter(id => checkAvailable(id) && (!requestedAgents || requestedAgents.includes(id)));
 
-            // Chat mode — PM agent leads, delegates as needed
-            if (msg.mode === "chat") {
+            // Lun mode (formerly "chat") — PM analyzes intent, delegates in
+            // parallel, returns a synthesized report. Default = brief opinion.
+            if (msg.mode === "chat" || msg.mode === "lun") {
               const config = loadConfig() || defaultConfig();
               const pmAgent = config.pmAgent || "claude";
               const pmModel = config.pmModel || config.models?.[pmAgent];
+              const reportStyle = msg.reportStyle === "detailed" ? "detailed" : "brief";
 
               if (!checkAvailable(pmAgent)) {
                 socket.send(JSON.stringify({ type: "error", message: `PM agent "${pmAgent}" not installed` }));
@@ -1087,6 +1235,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 models: config.models || {},
                 cwd: sessionOptions.cwd,
                 timeout: 180000,
+                reportStyle,
                 onToolCall: (agent, prompt) => {
                   socket.send(JSON.stringify({ type: "system", text: `→ Calling ${agent}: ${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}` }));
                   socket.send(JSON.stringify({ type: "provider-thinking", provider: agent }));
@@ -1141,27 +1290,42 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               break;
             }
 
-            // Discuss mode
-            if (msg.discuss) {
+            // Discuss mode — relay-style, PM-moderated, with techniques.
+            if (msg.discuss || msg.mode === "discuss") {
               const config = loadConfig() || defaultConfig();
-              // PM agent leads discussions too (use pmAgent if set, else moderator)
               const moderatorId = config.pmAgent || config.moderator || "claude";
               const moderatorModel = config.pmModel || config.models?.[moderatorId];
-              const modName = PROVIDERS[moderatorId]?.name || moderatorId;
 
-              // Moderator introduces the discussion
-              socket.send(JSON.stringify({ type: "moderator-msg", text: `I'll moderate this discussion. Let me ask the panel for their perspectives.\n\nQuestion: "${text}"` }));
+              if (!checkAvailable(moderatorId)) {
+                socket.send(JSON.stringify({ type: "error", message: `PM/moderator "${moderatorId}" not installed` }));
+                socket.send(JSON.stringify({ type: "done" }));
+                break;
+              }
+
+              // Unlimited when maxTurns explicitly 0; else use provided/config/default.
+              const maxTurns = msg.maxTurns === 0 ? 0 : (msg.maxTurns || config.autoDiscuss?.maxTurns || 3);
+              const maxTime = msg.maxTime === 0 ? 0 : (msg.maxTime || config.autoDiscuss?.maxTime || 120);
+              const technique = msg.technique || "auto";
+
+              socket.send(JSON.stringify({ type: "moderator-msg", text: `Moderating a relay discussion on:\n\n"${text}"` }));
 
               discuss(text, availableProviders, {
                 moderator: moderatorId,
                 moderatorModel: moderatorModel,
                 models: config.models || {},
-                maxTurns: msg.maxTurns || config.autoDiscuss?.maxTurns || 3,
-                maxTime: msg.maxTime || config.autoDiscuss?.maxTime || 120,
+                technique,
+                maxTurns,
+                maxTime,
+                turnTimeout: 45000,
                 timeout: 180000,
-                onTurnStart: (turn, question) => {
+                shouldStop: () => stopRequested,
+                onTechnique: (id, def) => {
+                  socket.send(JSON.stringify({ type: "system", text: `Discussion style: ${def?.label || id} — ${def?.desc || ""}` }));
+                },
+                onTurnStart: (turn, question, tech) => {
+                  socket.send(JSON.stringify({ type: "discuss-turn", turn }));
                   if (turn > 1) {
-                    socket.send(JSON.stringify({ type: "moderator-msg", text: `Let me follow up on the unresolved points:\n\n"${question}"` }));
+                    socket.send(JSON.stringify({ type: "moderator-msg", text: `Round ${turn} — following up:\n\n"${question}"` }));
                   }
                 },
                 onPanelistStart: (pid) => {
@@ -1182,8 +1346,8 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                     error: r.error ? r.text : null,
                   });
                 },
-                onSynthesis: (synthesisText, elapsed) => {
-                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Synthesis:**\n\n${synthesisText}`, elapsed }));
+                onSynthesis: (synthesisText, elapsed, turn) => {
+                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Round ${turn} synthesis**\n\n${synthesisText}`, elapsed }));
                   recordProviderRun({
                     requestId,
                     sessionId,
@@ -1195,13 +1359,19 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                     outputText: synthesisText || "",
                   });
                 },
-                onFollowup: () => {},
+                onConclude: (reason) => {
+                  socket.send(JSON.stringify({ type: "system", text: `Moderator concluded the discussion (${reason}).` }));
+                },
               }).then((result) => {
-                socket.send(JSON.stringify({ type: "moderator-msg", text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s total.` }));
+                const stoppedNote = stopRequested ? " (stopped by user)" : "";
+                socket.send(JSON.stringify({ type: "moderator-msg", text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s, style: ${result.technique}${stoppedNote}.` }));
                 try {
                   const session = new Session();
                   for (const t of result.turns) {
-                    session.addTurn(t.question, t.results.map(r => ({ ...r, model: "auto" })));
+                    session.addTurn(t.question, [
+                      ...t.results.map(r => ({ ...r, model: config.models?.[r.provider] || "auto" })),
+                      { provider: moderatorId, text: `[synthesis] ${t.synthesis}`, elapsed: t.synthesisElapsed, model: moderatorModel || "auto" },
+                    ]);
                   }
                 } catch {}
                 socket.send(JSON.stringify({ type: "done" }));
@@ -1511,6 +1681,7 @@ appendDaemonLog(`${IS_DAEMON ? "daemon" : "server"} started`, { pid: process.pid
 prewarmPersistentWorkers().catch(err => {
   appendDaemonLog("worker prewarm failed", { error: err.message });
 });
+startServeWatchdog();
 
 process.on("SIGTERM", () => {
   shutdownClaudeWorkers();

@@ -13,23 +13,39 @@
 import { runProvider } from "./runner.js";
 import { PROVIDERS, checkAvailable } from "./providers.js";
 
-const PM_SYSTEM_PROMPT = `You are Lun, a PM agent. Tools: {AGENTS_LIST}
+const PM_SYSTEM_PROMPT = `You are Lun — the user's delegate to a panel of AI agents. The user wants a well-rounded answer informed by multiple agents, not just one.
 
-To delegate: <call agent="name">your question</call>
-To call all: <call agent="all">question</call>
+Tools (agents you can consult): {AGENTS_LIST}
 
-CRITICAL ROUTING RULES:
-- Greeting/chitchat → answer directly (NO tools)
-- Math/simple facts → answer directly
-- "최근/recent/latest" anything (news, releases, changes) → MUST use <call agent="kiro"> or <call agent="agy">
-- Code review of provided code → <call agent="claude">
-- "vs/비교/어느게 나아" decisions → <call agent="all">
-- Coding examples (general) → answer directly
+To delegate: <call agent="name">a clear, specific question</call>
+To ask everyone in parallel: <call agent="all">the question</call>
 
-When delegating, your response should ONLY contain the <call> tag, nothing else.
-After getting tool results, synthesize a clean answer for the user.
+HOW YOU WORK EACH TURN:
+1. Figure out the user's real intent first.
+2. Trivial message (greeting, chit-chat, simple math/fact) → answer directly, NO tools.
+3. Otherwise → DELEGATE. This is your main job. Decide:
+   - Opinion / "vs" / design / review / "what's best" → <call agent="all"> so you get multiple perspectives.
+   - A task that clearly fits one agent (e.g. "latest/recent" info → kiro or agy) → call that agent.
+   - You may craft DIFFERENT, tailored questions for different agents when that gets better answers.
+4. When delegating, output ONLY the <call> tag(s) for that step — no other text.
+5. After you receive the agents' answers, write your final report.
 
-Reply in user's language. Be concise.`;
+Reply in the user's language. Be concise.`;
+
+// Final-report instructions, swapped by style.
+const REPORT_INSTRUCTION = {
+  brief: `Write a BRIEF report as the user's delegate (this is your synthesized opinion):
+- 2-4 sentences: the bottom-line recommendation / consensus.
+- Then 1-3 short bullets: key agreement(s) and any notable disagreement.
+- Do NOT restate each agent's full answer — the user can open those directly.
+- End with one clear, actionable takeaway.`,
+  detailed: `Write a DETAILED report as the user's delegate:
+- ## Summary — the bottom-line recommendation (2-4 sentences).
+- ## Where they agree — bullets.
+- ## Where they differ — bullets, with which agent took which side and why.
+- ## Recommendation — your concrete, actionable conclusion.
+Be thorough but do not pad. Use the user's language.`,
+};
 
 /**
  * Build the system prompt with available agents.
@@ -61,18 +77,18 @@ function parseToolCalls(text) {
 /**
  * Build the prompt for the PM agent.
  */
-function buildPromptForPM(systemPrompt, history, userMessage, toolResults = []) {
+function buildPromptForPM(systemPrompt, history, userMessage, toolResults = [], reportStyle = "brief") {
   let prompt = systemPrompt + "\n\n## Conversation\n\n";
   for (const turn of history) {
     prompt += `User: ${turn.user}\nAssistant: ${turn.assistant}\n\n`;
   }
   prompt += `User: ${userMessage}\n`;
   if (toolResults.length > 0) {
-    prompt += `\n## Tool Results\n\n`;
+    prompt += `\n## Agent Answers\n\n`;
     for (const r of toolResults) {
       prompt += `### ${r.agent}\n${r.text}\n\n`;
     }
-    prompt += `Now provide your final answer to the user based on the tool results above.\n`;
+    prompt += `\n${REPORT_INSTRUCTION[reportStyle] || REPORT_INSTRUCTION.brief}\n`;
   }
   prompt += `Assistant:`;
   return prompt;
@@ -113,6 +129,7 @@ export async function chatTurn(options) {
     onPMResponse,
     timeout = 120000,
     maxToolRounds = 3,
+    reportStyle = "brief",
   } = options;
 
   if (!checkAvailable(pmAgent)) {
@@ -126,7 +143,7 @@ export async function chatTurn(options) {
   for (let round = 0; round < maxToolRounds; round++) {
     if (onPMThinking) onPMThinking(round);
 
-    const fullPrompt = buildPromptForPM(systemPrompt, history, userMessage, toolResults);
+    const fullPrompt = buildPromptForPM(systemPrompt, history, userMessage, toolResults, reportStyle);
     const result = await runProvider(pmAgent, fullPrompt, {
       model: pmModel,
       timeout,

@@ -194,6 +194,73 @@ export async function moderatedQuery(prompt, availableProviders, options = {}) {
 
 const PANELIST_SYSTEM = `You are a panelist in a multi-agent discussion. Give your honest, specific opinion on the question. Be concise (3-5 key points max). If you disagree with a common approach, say so clearly and explain why. End with your concrete recommendation.`;
 
+// ============================================================
+// DISCUSSION TECHNIQUES (relay-style). PM picks one, or user forces it.
+// Each gives the next speaker a stance relative to what was already said.
+// ============================================================
+export const DISCUSSION_TECHNIQUES = {
+  debate: {
+    label: "Debate",
+    desc: "Take a side and argue it against what was said.",
+    instruction: `Take a clear position on the question. If previous speakers leaned one way, argue the strongest opposing case. Defend your stance with concrete reasons.`,
+  },
+  devils_advocate: {
+    label: "Devil's Advocate",
+    desc: "Attack the strongest point made so far.",
+    instruction: `Find the WEAKEST link in what previous speakers said and challenge it directly. Even if you mostly agree, surface the biggest risk or hidden assumption they missed.`,
+  },
+  build: {
+    label: "Build & Extend",
+    desc: "Add to and improve prior answers.",
+    instruction: `Build on the best ideas so far. Add what's missing, refine the reasoning, and push the answer closer to something actionable. Don't just repeat — extend.`,
+  },
+};
+
+export const DEFAULT_TECHNIQUE = "build";
+
+// Short-and-punchy directive used for every relay turn.
+const RELAY_BREVITY = `Keep it SHORT and punchy: at most 4 sentences or 4 bullets. State only your core point — no filler, no preamble, no restating the question.`;
+
+/**
+ * Build a relay-turn prompt: the speaker sees the question, the technique,
+ * and everything said so far in this round (sequential relay).
+ */
+function buildRelayPrompt({ question, technique, priorTurns, isFirst }) {
+  const tech = DISCUSSION_TECHNIQUES[technique] || DISCUSSION_TECHNIQUES[DEFAULT_TECHNIQUE];
+  let p = `You are a panelist in a moderated relay discussion.\n\nQuestion: ${question}\n\nDiscussion style — ${tech.label}: ${tech.instruction}\n\n${RELAY_BREVITY}\n`;
+  if (!isFirst && priorTurns.length) {
+    p += `\n## What's been said so far (most recent last)\n`;
+    for (const t of priorTurns) {
+      p += `\n### ${t.provider}\n${t.text}\n`;
+    }
+    p += `\nNow add YOUR turn. React to the above per the discussion style. Do not repeat points already made.`;
+  } else {
+    p += `\nYou speak first. Open the discussion with your core position.`;
+  }
+  return p;
+}
+
+const PICK_TECHNIQUE_PROMPT = `You are moderating a multi-agent discussion. Based on the user's question, pick the most useful discussion style.
+
+Options:
+- debate: when there are clear competing options/sides.
+- devils_advocate: when one obvious answer needs stress-testing.
+- build: when the goal is to construct the best combined answer.
+
+Question: {QUESTION}
+
+Reply with ONLY one word: debate, devils_advocate, or build.`;
+
+const CONCLUDE_CHECK_PROMPT = `You are the moderator and the user's delegate. The user wants a useful conclusion, not endless talk.
+
+Question: {QUESTION}
+
+Discussion so far:
+{TRANSCRIPT}
+
+Decide: has the discussion converged enough to conclude, or is another round genuinely valuable?
+Reply with ONLY one word: CONCLUDE or CONTINUE.`;
+
 const SYNTHESIS_PROMPT = `You are the moderator of a multi-agent panel discussion. You just heard from multiple AI agents on the same question.
 
 Your job as moderator:
@@ -272,71 +339,91 @@ export async function generateFollowup(moderatorId, originalPrompt, results, syn
 }
 
 /**
- * Run a full autonomous discussion with debate-style pacing.
+ * Run a relay-style moderated discussion.
  *
  * Flow per round:
- * 1. Moderator frames the question (onModeratorSpeak)
- * 2. Each panelist answers ONE BY ONE sequentially (onResult)
- * 3. Moderator synthesizes (onSynthesis)
- * 4. Moderator generates follow-up → next round
+ * 1. (round 1 only) PM picks a technique unless one is forced.
+ * 2. Panelists speak ONE BY ONE; each sees everything said before it (relay).
+ * 3. Moderator synthesizes the round.
+ * 4. PM judges CONCLUDE vs CONTINUE (when unlimited); bounded by maxTurns/maxTime.
  *
  * Options:
- *   - moderator: provider ID for the moderator
- *   - moderatorModel: model for the moderator
- *   - models: { provider: model } for panelists
- *   - maxTurns: max discussion rounds (default: 3)
- *   - maxTime: max total time in seconds (default: 120)
- *   - timeout: per-provider timeout in ms
- *   - onTurnStart: (turnNumber, question) => void
- *   - onPanelistStart: (provider) => void — about to ask this panelist
- *   - onResult: (result) => void — panelist answered
- *   - onSynthesis: (text, elapsed) => void
- *   - onFollowup: (question) => void
- *   - onRoute: (plan) => void
+ *   - moderator, moderatorModel, models
+ *   - technique: "debate" | "devils_advocate" | "build" | "auto" (PM picks)
+ *   - maxTurns: number, or 0 / Infinity for unlimited (PM decides when to stop)
+ *   - maxTime: seconds cap (0 = no time cap)
+ *   - turnTimeout: per-speaker timeout ms (short, to keep answers punchy)
+ *   - timeout: moderator/synthesis timeout ms
+ *   - shouldStop: () => boolean  — external stop signal (UI stop button)
+ *   - onTechnique, onTurnStart, onPanelistStart, onResult, onSynthesis, onConclude
  */
 export async function discuss(originalPrompt, availableProviders, options = {}) {
   const {
     moderator = "claude",
     moderatorModel,
     models = {},
+    technique = "auto",
     maxTurns = 3,
     maxTime = 120,
+    turnTimeout = 45000,
     timeout = 120000,
+    shouldStop,
+    onTechnique,
     onTurnStart,
     onPanelistStart,
     onResult,
     onSynthesis,
-    onFollowup,
-    onRoute,
+    onConclude,
   } = options;
 
   const startTime = Date.now();
-  // Moderator participates as panelist too
   const panelists = availableProviders;
+  const unlimited = !maxTurns || maxTurns === Infinity || maxTurns <= 0;
+  const hardCap = unlimited ? 50 : maxTurns; // safety ceiling for "unlimited"
+
+  // 1. Resolve technique (PM picks if "auto")
+  let activeTechnique = technique;
+  if (technique === "auto") {
+    try {
+      const pick = await runProvider(moderator, PICK_TECHNIQUE_PROMPT.replace("{QUESTION}", originalPrompt), {
+        model: moderatorModel || models[moderator],
+        timeout: 30000,
+      });
+      const word = (pick.text || "").toLowerCase().match(/debate|devils_advocate|build/);
+      activeTechnique = word ? word[0] : DEFAULT_TECHNIQUE;
+    } catch {
+      activeTechnique = DEFAULT_TECHNIQUE;
+    }
+  }
+  if (!DISCUSSION_TECHNIQUES[activeTechnique]) activeTechnique = DEFAULT_TECHNIQUE;
+  if (onTechnique) onTechnique(activeTechnique, DISCUSSION_TECHNIQUES[activeTechnique]);
 
   const turns = [];
   let currentQuestion = originalPrompt;
+  const timeUp = () => maxTime > 0 && (Date.now() - startTime) / 1000 >= maxTime;
+  const stopped = () => (typeof shouldStop === "function" && shouldStop());
 
-  for (let turn = 1; turn <= maxTurns; turn++) {
-    const elapsed = (Date.now() - startTime) / 1000;
-    if (elapsed >= maxTime && turn > 1) break;
+  for (let turn = 1; turn <= hardCap; turn++) {
+    if (stopped()) break;
+    if (turn > 1 && timeUp()) break;
+    if (onTurnStart) onTurnStart(turn, currentQuestion, activeTechnique);
 
-    if (onTurnStart) onTurnStart(turn, currentQuestion);
-
-    // 1. Ask panelists ONE BY ONE (sequential for debate feel)
+    // 2. Relay: each panelist sees prior speakers' answers this round.
     const results = [];
+    const priorTurns = [];
     for (const pid of panelists) {
+      if (stopped()) break;
       if (onPanelistStart) onPanelistStart(pid);
-      // Wrap prompt with panelist system instruction
-      const panelistPrompt = turn === 1
-        ? `${PANELIST_SYSTEM}\n\n## Question\n${currentQuestion}`
-        : `${PANELIST_SYSTEM}\n\nThis is a follow-up question in an ongoing discussion. The moderator wants you to go deeper.\n\n## Follow-up Question\n${currentQuestion}`;
+      const relayPrompt = buildRelayPrompt({
+        question: currentQuestion,
+        technique: activeTechnique,
+        priorTurns,
+        isFirst: priorTurns.length === 0,
+      });
       try {
-        const r = await runProvider(pid, panelistPrompt, {
-          model: models[pid],
-          timeout,
-        });
+        const r = await runProvider(pid, relayPrompt, { model: models[pid], timeout: turnTimeout });
         results.push(r);
+        priorTurns.push({ provider: pid, text: r.text });
         if (onResult) onResult(r);
       } catch (err) {
         const r = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
@@ -345,33 +432,50 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
       }
     }
 
-    // 2. Moderator synthesizes all panelist answers
+    // 3. Moderator synthesizes the round.
     const synthResult = await synthesize(moderator, currentQuestion, results, {
       model: moderatorModel || models[moderator],
       timeout,
     });
-
-    if (onSynthesis) onSynthesis(synthResult.text, synthResult.elapsed);
+    if (onSynthesis) onSynthesis(synthResult.text, synthResult.elapsed, turn);
 
     turns.push({
       turn,
+      technique: activeTechnique,
       question: currentQuestion,
       results,
       synthesis: synthResult.text,
       synthesisElapsed: synthResult.elapsed,
     });
 
-    // 3. Check if we should continue
-    if (turn >= maxTurns) break;
-    const totalElapsed = (Date.now() - startTime) / 1000;
-    if (totalElapsed >= maxTime) break;
+    // 4. Stop conditions.
+    if (stopped()) break;
+    if (turn >= hardCap) break;
+    if (!unlimited && turn >= maxTurns) break;
+    if (timeUp()) break;
 
-    // 4. Generate follow-up
+    // PM judges whether to conclude (always for unlimited; also caps token waste).
+    try {
+      const transcript = turns.map(t => `Round ${t.turn} synthesis:\n${t.synthesis}`).join("\n\n");
+      const decision = await runProvider(moderator, CONCLUDE_CHECK_PROMPT
+        .replace("{QUESTION}", originalPrompt)
+        .replace("{TRANSCRIPT}", transcript), {
+        model: moderatorModel || models[moderator],
+        timeout: 30000,
+      });
+      if (/conclude/i.test(decision.text || "")) {
+        if (onConclude) onConclude("converged");
+        break;
+      }
+    } catch {
+      // if the check fails, fall through to next round (bounded by caps)
+    }
+
+    // 5. Generate next-round follow-up question.
     try {
       const followup = await generateFollowup(moderator, originalPrompt, results, synthResult.text, {
         model: moderatorModel || models[moderator],
       });
-      if (onFollowup) onFollowup(followup);
       currentQuestion = followup;
     } catch {
       break;
@@ -381,6 +485,7 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
   return {
     originalPrompt,
     moderator,
+    technique: activeTechnique,
     turns,
     totalTime: ((Date.now() - startTime) / 1000).toFixed(1),
   };

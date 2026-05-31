@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { estimateCost } from "./pricing.js";
 
 const HOME = process.env.HOME || process.cwd();
 export const LUN_DIR = join(HOME, ".lun");
@@ -13,6 +14,10 @@ mkdirSync(REPORTS_DIR, { recursive: true });
 
 function appendNdjson(path, event) {
   appendFileSync(path, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
+}
+
+function round6(n) {
+  return Math.round((n || 0) * 1e6) / 1e6;
 }
 
 export function writeDaemonState(state) {
@@ -47,6 +52,7 @@ export function summarizeUsage(limit = 5000) {
   let totalLatency = 0;
   let ok = 0;
   let errors = 0;
+  let totalCost = 0;
 
   for (const run of runs) {
     const id = run.provider || "unknown";
@@ -59,6 +65,7 @@ export function summarizeUsage(limit = 5000) {
       totalLatencyMs: 0,
       inputChars: 0,
       outputChars: 0,
+      costUsd: 0,
       lastModel: "",
       lastStatus: "",
       lastAt: "",
@@ -67,6 +74,8 @@ export function summarizeUsage(limit = 5000) {
     bucket.totalLatencyMs += run.latencyMs || 0;
     bucket.inputChars += run.inputChars || 0;
     bucket.outputChars += run.outputChars || 0;
+    const runCost = estimateCost(run.model, run.inputChars || 0, run.outputChars || 0);
+    bucket.costUsd += runCost;
     bucket.lastModel = run.model || bucket.lastModel;
     bucket.lastStatus = run.status || bucket.lastStatus;
     bucket.lastAt = run.ts || bucket.lastAt;
@@ -75,12 +84,13 @@ export function summarizeUsage(limit = 5000) {
     providers[id] = bucket;
 
     totalLatency += run.latencyMs || 0;
+    totalCost += runCost;
     if (run.status === "ok") ok += 1;
     else errors += 1;
   }
 
   const providerRows = Object.values(providers)
-    .map(p => ({ ...p, avgLatencyMs: p.count ? Math.round(p.totalLatencyMs / p.count) : 0 }))
+    .map(p => ({ ...p, avgLatencyMs: p.count ? Math.round(p.totalLatencyMs / p.count) : 0, costUsd: round6(p.costUsd) }))
     .sort((a, b) => b.count - a.count);
 
   return {
@@ -91,9 +101,10 @@ export function summarizeUsage(limit = 5000) {
       avgLatencyMs: runs.length ? Math.round(totalLatency / runs.length) : 0,
       inputChars: runs.reduce((sum, r) => sum + (r.inputChars || 0), 0),
       outputChars: runs.reduce((sum, r) => sum + (r.outputChars || 0), 0),
+      costUsd: round6(totalCost),
     },
     providers: providerRows,
-    recent: runs.slice(-80).reverse(),
+    recent: runs.slice(-80).reverse().map(r => ({ ...r, costUsd: round6(estimateCost(r.model, r.inputChars || 0, r.outputChars || 0)) })),
     path: USAGE_LOG_PATH,
   };
 }
