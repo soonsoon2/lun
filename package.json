@@ -3,12 +3,22 @@
   "version": "1.6.0",
   "description": "Multi-agent consensus CLI — ask multiple AI agents and compare answers",
   "type": "module",
+  "author": "SOONSOON (https://github.com/soonsoon2)",
+  "homepage": "https://lun.soonsoon.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soonsoon2/lun.git"
+  },
+  "bugs": {
+    "url": "https://github.com/soonsoon2/lun/issues"
+  },
   "bin": {
     "lun": "./bin/lun.js"
   },
   "scripts": {
     "start": "node server.js",
     "check": "node --check bin/lun.js && node --check server.js",
+    "test": "node --test test/*.test.js",
     "cli": "node bin/lun.js"
   },
   "keywords": [
@@ -30,6 +40,7 @@
     "extensions/",
     "server.js",
     "README.md",
+    "LICENSE",
     "lun-image.png"
   ],
   "engines": {

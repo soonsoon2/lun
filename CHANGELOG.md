@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **LICENSE** file (MIT) — previously declared but missing.
+- **Open-source governance**: `CONTRIBUTING.md`, `SECURITY.md`,
+  `CODE_OF_CONDUCT.md`, GitHub issue/PR templates.
+- **Tests**: `test/` suite using Node's built-in test runner (`npm test`),
+  covering provider definitions, output cleaning, and cost estimation.
+- **CI**: GitHub Actions workflow running `check` + `test` on Node 18/20/22.
+- **`lun.soonsoon.io`** landing page.
+
+### Changed
+- Install path is now GitHub-based: `npm install -g github:soonsoon2/lun`.
+- `package.json` gained `repository`, `bugs`, `homepage`, `author`, and a
+  `test` script.
+
+### Security
+- Documented the security model in `SECURITY.md`: auto-approved agent tool use
+  and the unauthenticated localhost server.
+
 ## [1.6.0] — 2026-05-10
 
 ### Added

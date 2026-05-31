@@ -12,6 +12,7 @@
 > Ask multiple agents at once and compare.
 
 [![GitHub](https://img.shields.io/badge/install-github-181717?style=flat-square&logo=github)](https://github.com/soonsoon2/lun)
+[![CI](https://img.shields.io/github/actions/workflow/status/soonsoon2/lun/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/soonsoon2/lun/actions)
 [![license](https://img.shields.io/github/license/soonsoon2/lun?style=flat-square)](LICENSE)
 [![site](https://img.shields.io/badge/site-lun.soonsoon.io-74e39b?style=flat-square)](https://lun.soonsoon.io)
 
@@ -353,6 +354,20 @@ myagent: {
 - Node.js >= 18
 - At least one AI agent CLI installed and authenticated
 
+## Contributing
+
+Contributions, new providers, and forks are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) to get started, and please follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Lun is a local tool that auto-approves agent tool use and runs an
+**unauthenticated** local server (localhost only by default). Please read
+[SECURITY.md](SECURITY.md) before exposing it beyond your own machine, and
+report vulnerabilities privately rather than as public issues.
+
 ## License
 
-MIT
+[MIT](LICENSE) © SOONSOON
+
