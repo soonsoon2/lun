@@ -947,16 +947,32 @@ async function main() {
     const list = activeProviders.map(p => { const m = activeModels[p]; return m && m !== "auto" ? `${p}(${m})` : p; }).join(", ");
     console.log(`\n\x1b[90m  Lun — ${t("asking", list)}\x1b[0m\n`);
 
+    // Track which agents are still pending so the user sees progress even when
+    // a slow agent (e.g. kiro) hasn't returned yet.
+    const pending = new Set(activeProviders);
+    const showPending = () => {
+      if (!pending.size) return;
+      const names = [...pending].map(p => PROVIDERS[p]?.name || p).join(", ");
+      process.stdout.write(`\x1b[90m  ⋯ waiting on ${names}\x1b[0m\n`);
+    };
+
     const { intent, strategy, reason, skippedNote, results } = await moderatedQuery(fullPrompt, activeProviders, {
       models: activeModels,
-      cwd: process.cwd(),
+      // Let runner pick the configured work dir (fast for kiro/codex). Set
+      // LUN_USE_CWD=1 to ask agents about the current directory instead.
+      cwd: process.env.LUN_USE_CWD === "1" ? process.cwd() : undefined,
       timeout: activeTimeout,
       onRoute: (plan) => {
         if (plan.strategy !== "all") {
           console.log(`  \x1b[90m[${plan.intent}] ${plan.reason}\x1b[0m\n`);
         }
+        // Only the routed providers are actually pending
+        pending.clear();
+        for (const pid of plan.providers) pending.add(pid);
+        showPending();
       },
       onResult: (r) => {
+        pending.delete(r.provider);
         const name = PROVIDERS[r.provider]?.name || r.provider;
         const model = activeModels[r.provider] || "auto";
         if (r.error) {
@@ -966,6 +982,7 @@ async function main() {
           console.log(`\x1b[36m  --- ${name} (${r.elapsed}s, ${model}) ---\x1b[0m`);
           console.log(`  ${(r.text || "(no response)").replace(/\n/g, "\n  ")}\n`);
         }
+        showPending();
       },
     });
 
