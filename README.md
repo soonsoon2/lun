@@ -62,6 +62,28 @@ Lun makes this a 10-second habit instead of a 10-minute tab-switching ritual.
 
 ---
 
+## Five ways to use Lun
+
+Lun runs the same engine everywhere — pick whichever fits your moment:
+
+| # | Scenario | Command | When to reach for it |
+|---|----------|---------|----------------------|
+| 1 | **Terminal one-shot / REPL** | `lun "question"` or just `lun` | Quick gut-check from where you already work |
+| 2 | **PM chat** | `lun chat` | A conversation where Lun decides which agents to consult and synthesizes |
+| 3 | **Local web UI** | `lun serve` → `localhost:3456` | Visual group-chat with streaming, history, usage stats |
+| 4 | **VS Code / Copilot Chat** | `@lun` (install the VSIX) | Stay inside your editor |
+| 5 | **Agent-to-agent** | `lun -j "question"` | Let another AI agent consult the panel and parse NDJSON |
+
+> **Do I need to start a daemon first?** No. `lun "question"` works on its own —
+> if no daemon is running it just spawns the agents directly. Running
+> `lun daemon start` (or `lun serve`) is optional: it keeps agents warm so
+> repeat calls skip CLI cold-start. Set `LUN_NO_DAEMON=1` to always run direct.
+
+Each scenario is detailed below. Start with #1 — it needs nothing but one
+installed agent CLI.
+
+---
+
 ## Install
 
 Install straight from GitHub:
@@ -115,6 +137,36 @@ cat design.md | lun "What are the risks here?"
 # Auto-synthesize all answers into one recommendation
 lun -s "Redis vs Memcached for session storage?"
 ```
+
+---
+
+## PM Chat (`lun chat`)
+
+`lun "question"` asks every agent the same thing. **`lun chat` is different** —
+it starts a conversation led by a "PM" agent that decides which specialists to
+consult, calls them as tools, and synthesizes their answers for you.
+
+```bash
+lun chat
+```
+
+```
+  > How should I cache sessions, and is Redis overkill?
+
+  claude (PM) is planning…
+  → consulting kiro, codex on caching trade-offs
+  ← kiro (4.1s), codex (6.2s)
+
+  For your scale, Redis is not overkill — but here's the nuance both agents
+  raised: if sessions are small and single-region, a signed cookie or
+  in-memory store may be simpler. If you need shared state across instances,
+  Redis earns its place...
+```
+
+- The PM is configurable in `lun --init` (`pmAgent` / `pmModel` in config).
+- It keeps conversation history within the session.
+- Full per-agent output is saved to the session file; the chat shows the
+  synthesis first.
 
 ---
 
@@ -218,6 +270,10 @@ Lun also has a local web interface with a group-chat style UI:
 lun serve
 # → http://localhost:3456
 ```
+
+`lun serve` runs with warm workers (daemon mode) for the life of the process,
+and shuts down when you close the browser tab. It binds to `127.0.0.1` only —
+see [SECURITY.md](SECURITY.md) before changing `LUN_HOST`.
 
 Custom port:
 ```bash
@@ -324,6 +380,7 @@ Stored at `~/.lun/config.json`:
 |----------|---------|-------------|
 | `LUN_PORT` | `3456` | Web UI port |
 | `LUN_HOST` | `127.0.0.1` | Web UI bind address |
+| `LUN_NO_DAEMON` | unset | Set to `1` to always run agents directly, skipping the daemon |
 | `LUN_PREWARM_WORKERS` | `1` | Set to `0` to skip daemon worker prewarm on startup |
 | `LUN_DISABLE_ACP_WORKER` | unset | Set to `1` to force Kiro/Copilot back to spawn-per-turn mode |
 | `LUN_ACP_REUSE_SESSION` | unset | Set to `1` to reuse Kiro/Copilot ACP sessions across prompts |
