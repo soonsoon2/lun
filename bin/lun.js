@@ -8,7 +8,7 @@ import { runProvider, runAll } from "../src/runner.js";
 import { moderatedQuery, detectIntent, discuss, synthesize } from "../src/moderator.js";
 import { chatTurn } from "../src/lun-agent.js";
 import { SKILLS, AGENT_SKILLS, agentsBySkill } from "../src/skills.js";
-import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions } from "../src/config.js";
+import { loadConfig, saveConfig, defaultConfig, ensureDirs, CONFIG_PATH, getSessionsDir, migrateSessions, DEFAULT_WORK_DIR, ensureWorkDir, getWorkDir } from "../src/config.js";
 import { Session, listSessions } from "../src/session.js";
 import { DAEMON_LOG_PATH, readDaemonState } from "../src/daemon-store.js";
 import { t } from "../src/i18n.js";
@@ -150,7 +150,13 @@ async function cmdInit() {
   console.log("");
   const timeoutStr = await promptText(t("timeout_prompt"), "120");
 
-  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, moderator: moderatorChoice, pmAgent: pmChoice, pmModel, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
+  console.log("");
+  console.log(`  \x1b[90mLun runs agents in a dedicated work folder (keeps kiro/codex fast).\x1b[0m`);
+  const workDirInput = await promptText("  Work folder", DEFAULT_WORK_DIR);
+  const workDir = workDirInput.startsWith("~/") ? join(process.env.HOME, workDirInput.slice(2)) : (workDirInput || DEFAULT_WORK_DIR);
+  ensureWorkDir(workDir);
+
+  const config = { language: lang, providers, models, timeout: parseInt(timeoutStr) || 120, workDir, moderator: moderatorChoice, pmAgent: pmChoice, pmModel, sessionsPath: getSessionsDir(), autoDiscuss: { enabled: false, maxTurns: 3, maxTime: 120 } };
   saveConfig(config);
   console.log(`\n  \x1b[32mv\x1b[0m ${t("config_saved")} ${CONFIG_PATH}\n`);
 }
@@ -168,6 +174,7 @@ function cmdConfig() {
   if (config.pmAgent) console.log(`  PM Agent:  ${config.pmAgent} (${config.pmModel || config.models?.[config.pmAgent] || "default"})`);
   if (config.moderator) console.log(`  Moderator: ${config.moderator}`);
   console.log(`  Timeout:   ${config.timeout}s`);
+  console.log(`  Work dir:  ${config.workDir || DEFAULT_WORK_DIR}`);
   console.log(`  Sessions:  ${getSessionsDir()}\n`);
 }
 

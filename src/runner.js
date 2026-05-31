@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
+import { getWorkDir } from "./config.js";
 import { runCodexSDK } from "./codex-sdk-runner.js";
 import { runClaudeWorker } from "./claude-worker.js";
 import { runAcpWorker, supportsAcpWorker } from "./acp-worker.js";
@@ -70,13 +71,20 @@ export function runProvider(providerId, prompt, options = {}) {
 
   const { model, sessionId: resumeSessionId, cwd, timeout = 120000, onChunk } = options;
 
+  // Agents (kiro/codex especially) scan their cwd on startup. Default to the
+  // configured lun work dir instead of HOME so they stay fast regardless of
+  // where `lun` was invoked. An explicit cwd (e.g. from the web/daemon API)
+  // still wins. Override with LUN_USE_CWD=1 to use the actual process cwd.
+  const effectiveCwd = cwd
+    || (process.env.LUN_USE_CWD === "1" ? process.cwd() : getWorkDir());
+
   // Codex fast path: use the SDK so the CLI process is reused across turns.
   // Cuts cold-start floor from ~5s to ~3-4s on follow-up turns.
   if (providerId === "codex") {
     return runCodexSDK(prompt, {
       sessionKey: resumeSessionId || "default",
       model: model || providerDef.defaultModel,
-      cwd: cwd || process.env.HOME,
+      cwd: effectiveCwd,
       timeout,
       onChunk,
     }).catch(err => Promise.reject(err));
@@ -85,7 +93,7 @@ export function runProvider(providerId, prompt, options = {}) {
   if (providerId === "claude" && process.env.LUN_DAEMON === "1" && process.env.LUN_DISABLE_CLAUDE_WORKER !== "1") {
     return runClaudeWorker(prompt, {
       model: model || providerDef.defaultModel,
-      cwd: cwd || process.env.HOME,
+      cwd: effectiveCwd,
       timeout,
       onChunk,
     }).catch(err => Promise.reject(err));
@@ -94,7 +102,7 @@ export function runProvider(providerId, prompt, options = {}) {
   if (supportsAcpWorker(providerId) && process.env.LUN_DAEMON === "1" && process.env.LUN_DISABLE_ACP_WORKER !== "1") {
     return runAcpWorker(providerId, prompt, {
       model: model || providerDef.defaultModel,
-      cwd: cwd || process.env.HOME,
+      cwd: effectiveCwd,
       timeout,
       onChunk,
     }).catch(err => Promise.reject(err));
@@ -103,7 +111,7 @@ export function runProvider(providerId, prompt, options = {}) {
   if (["kiro", "copilot", "agy"].includes(providerId) && process.env.LUN_DAEMON === "1") {
     return runManagedAgentWorker(providerId, prompt, {
       model: model || providerDef.defaultModel,
-      cwd: cwd || process.env.HOME,
+      cwd: effectiveCwd,
       timeout,
       onChunk,
     }).catch(err => Promise.reject(err));
@@ -144,7 +152,7 @@ export function runProvider(providerId, prompt, options = {}) {
     }
 
     const startTime = Date.now();
-    const child = spawn(bin, args, { cwd: providerDef.cwdOverride || cwd || process.env.HOME, env });
+    const child = spawn(bin, args, { cwd: providerDef.cwdOverride || effectiveCwd, env });
     // Close stdin immediately — codex and some others wait for additional input from stdin
     if (child.stdin) child.stdin.end();
     let stdout = "";

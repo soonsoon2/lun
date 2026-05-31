@@ -370,6 +370,7 @@ Stored at `~/.lun/config.json`:
   "pmModel": "sonnet",
   "moderator": "copilot",
   "timeout": 120,
+  "workDir": "~/Documents/lun-workspace",
   "sessionsPath": "~/.lun/sessions"
 }
 ```
@@ -380,6 +381,7 @@ Stored at `~/.lun/config.json`:
 |----------|---------|-------------|
 | `LUN_PORT` | `3456` | Web UI port |
 | `LUN_HOST` | `127.0.0.1` | Web UI bind address |
+| `LUN_USE_CWD` | unset | Set to `1` to run agents in the current directory instead of the configured work dir |
 | `LUN_NO_DAEMON` | unset | Set to `1` to always run agents directly, skipping the daemon |
 | `LUN_PREWARM_WORKERS` | `1` | Set to `0` to skip daemon worker prewarm on startup |
 | `LUN_DISABLE_ACP_WORKER` | unset | Set to `1` to force Kiro/Copilot back to spawn-per-turn mode |

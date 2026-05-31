@@ -7,10 +7,38 @@ import { join } from "path";
 export const LUN_DIR = join(process.env.HOME, ".lun");
 export const CONFIG_PATH = join(LUN_DIR, "config.json");
 
+// Default agent working directory — lives under the user's Documents folder.
+// Agents (especially kiro/codex) scan their cwd on startup, so running them
+// in a dedicated, mostly-empty folder keeps them fast no matter where the
+// user invokes `lun` from. Configurable via config.workDir.
+export const DEFAULT_WORK_DIR = join(process.env.HOME, "Documents", "lun-workspace");
+
 // Sessions dir is configurable via config.sessionsPath
 export function getSessionsDir() {
   const config = loadConfig();
   return config?.sessionsPath || join(LUN_DIR, "sessions");
+}
+
+/**
+ * The directory agents run in. Defaults to ~/Documents/lun-workspace.
+ * Created on demand so it always exists when an agent spawns.
+ */
+export function getWorkDir() {
+  const config = loadConfig();
+  const dir = config?.workDir || DEFAULT_WORK_DIR;
+  return ensureWorkDir(dir);
+}
+
+export function ensureWorkDir(dir = DEFAULT_WORK_DIR) {
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    // If the configured dir can't be created (e.g. permissions), fall back
+    // to the lun home so agents still have a small, stable place to run.
+    try { mkdirSync(LUN_DIR, { recursive: true }); } catch {}
+    return LUN_DIR;
+  }
+  return dir;
 }
 
 // For backward compat — dynamic getter
@@ -61,6 +89,7 @@ export function defaultConfig() {
     models: { kiro: "auto", claude: "sonnet", copilot: "auto", agy: "auto" },
     timeout: 120,
     sessionsPath: join(LUN_DIR, "sessions"),
+    workDir: DEFAULT_WORK_DIR,
     moderator: "claude",
     autoDiscuss: {
       enabled: false,
