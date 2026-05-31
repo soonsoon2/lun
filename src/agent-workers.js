@@ -2,19 +2,9 @@ import { spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { PROVIDERS } from "./providers.js";
+import { stripAnsi } from "./runner.js";
 
 const workers = new Map();
-
-function stripAnsiLocal(str) {
-  return str
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
-    .replace(/\x1b\[[\?=>!]?[0-9;]*[a-zA-Z]/g, "")
-    .replace(/\x1b[()][A-Z012]/g, "")
-    .replace(/\x1b[\x20-\x7e]/g, "")
-    .replace(/\x1b/g, "")
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
-    .trim();
-}
 
 function cleanOutputLocal(raw) {
   return raw
@@ -118,7 +108,7 @@ class ManagedAgentWorker {
       const text = chunk.toString();
       stdout += text;
       if (task.onChunk) {
-        const cleaned = stripAnsiLocal(text).trim();
+        const cleaned = stripAnsi(text).trim();
         if (cleaned) task.onChunk(this.provider, cleaned);
       }
     });
@@ -129,7 +119,7 @@ class ManagedAgentWorker {
     });
     child.on("close", code => {
       clearTimeout(timer);
-      const text = cleanOutputLocal(stripAnsiLocal(`${stdout}\n${stderr}`));
+      const text = cleanOutputLocal(stripAnsi(`${stdout}\n${stderr}`));
       if (!text && code !== 0) {
         this.finish(task, new Error(`${def.bin} exited with code ${code}`));
       } else {
