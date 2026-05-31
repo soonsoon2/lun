@@ -10,6 +10,8 @@ import { PROVIDERS, checkAvailable } from "./src/providers.js";
 import { runProvider, runAll, stripAnsi, cleanOutput } from "./src/runner.js";
 import { moderatedQuery, detectIntent, discuss, synthesize } from "./src/moderator.js";
 import { chatTurn } from "./src/lun-agent.js";
+import { findSessionForPrompt, parseLastTurn } from "./src/kiro-session.js";
+import { localFastPath } from "./src/fast-path.js";
 import { handleLargePrompt } from "./src/large-prompt.js";
 import { Session } from "./src/session.js";
 import { loadConfig, defaultConfig, getSessionsDir, saveConfig, getRunDir } from "./src/config.js";
@@ -37,7 +39,6 @@ const IS_DAEMON = process.env.LUN_DAEMON === "1";
 const IS_SERVE = process.env.LUN_SERVE === "1"; // browser-lifecycle mode (close tab => exit)
 const DATA_DIR = join(__dirname, "_data");
 const THREADS_DIR = join(DATA_DIR, "threads");
-const KIRO_SESSIONS_DIR = join(process.env.HOME, ".kiro/sessions/cli");
 let actualPort = PORT;
 const apiChatHistories = new Map();
 
@@ -195,126 +196,6 @@ function writeMeta(path, meta) {
   writeFileSync(path, JSON.stringify(meta, null, 2));
 }
 
-function findSessionForPrompt(promptText, startedAtMs) {
-  try {
-    const files = readdirSync(KIRO_SESSIONS_DIR)
-      .filter(f => f.endsWith(".jsonl"))
-      .map(f => {
-        const path = join(KIRO_SESSIONS_DIR, f);
-        const stat = statSync(path);
-        return { path, mtime: stat.mtimeMs, id: f.replace(".jsonl", "") };
-      })
-      .filter(f => f.mtime >= startedAtMs - 5000)
-      .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, 12);
-
-    for (const file of files) {
-      const lines = readFileSync(file.path, "utf-8").trim().split("\n").filter(Boolean);
-      for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-          const entry = JSON.parse(lines[i]);
-          if (entry.kind !== "Prompt") continue;
-          const text = (entry.data?.content || [])
-            .filter(part => part.kind === "text")
-            .map(part => part.data || "")
-            .join("\n")
-            .trim();
-          if (text === promptText.trim()) return file.id;
-          break;
-        } catch {}
-      }
-    }
-  } catch { return null; }
-  return null;
-}
-
-// Parse the last turn from a kiro session file
-function parseLastTurn(sessionId) {
-  const jsonlPath = join(KIRO_SESSIONS_DIR, `${sessionId}.jsonl`);
-  if (!existsSync(jsonlPath)) return null;
-
-  const content = readFileSync(jsonlPath, "utf-8");
-  const lines = content.trim().split("\n").filter(Boolean);
-
-  // Find the last Prompt and collect everything after it
-  let lastPromptIdx = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    try {
-      const obj = JSON.parse(lines[i]);
-      if (obj.kind === "Prompt") { lastPromptIdx = i; break; }
-    } catch {}
-  }
-
-  if (lastPromptIdx === -1) return null;
-
-  const turn = [];
-  for (let i = lastPromptIdx + 1; i < lines.length; i++) {
-    try {
-      turn.push(JSON.parse(lines[i]));
-    } catch {}
-  }
-
-  return formatTurn(turn);
-}
-
-// Convert raw turn data into structured messages for the client
-function formatTurn(entries) {
-  const result = { tools: [], text: "" };
-
-  for (const entry of entries) {
-    if (entry.kind === "AssistantMessage") {
-      for (const part of entry.data.content) {
-        if (part.kind === "text" && part.data) {
-          result.text += part.data + "\n";
-        } else if (part.kind === "toolUse") {
-          const tool = part.data;
-          result.tools.push({
-            id: tool.toolUseId,
-            name: tool.name,
-            purpose: tool.input?.__tool_use_purpose || tool.input?.label || tool.name,
-            input: tool.input || {},
-            result: null,
-          });
-        }
-      }
-    } else if (entry.kind === "ToolResults") {
-      for (const c of entry.data.content) {
-        if (c.kind === "toolResult") {
-          const toolId = c.data.toolUseId;
-          const existing = result.tools.find(t => t.id === toolId);
-          if (existing) {
-            existing.result = summarizeToolResult(c.data.content);
-          }
-        }
-      }
-    }
-  }
-
-  result.text = result.text.trim();
-  return result;
-}
-
-function summarizeToolResult(content) {
-  const parts = [];
-  for (const item of content) {
-    if (item.kind === "text") {
-      parts.push({ type: "text", data: item.data.slice(0, 2000) });
-    } else if (item.kind === "json") {
-      const d = item.data;
-      if (d.exit_status !== undefined) {
-        parts.push({ type: "cmd", exitCode: d.exit_status, stdout: (d.stdout || "").slice(0, 500) });
-      } else if (d.results) {
-        parts.push({ type: "search", count: d.results.length, results: d.results.slice(0, 5).map(r => ({ title: r.title, url: r.url })) });
-      } else if (d.content) {
-        parts.push({ type: "fetch", content: (d.content || "").slice(0, 300) });
-      } else {
-        parts.push({ type: "json", data: JSON.stringify(d).slice(0, 500) });
-      }
-    }
-  }
-  return parts;
-}
-
 function recordProviderRun({ requestId, sessionId, mode, provider, model, status = "ok", latencyMs, inputText = "", outputText = "", error = null }) {
   appendUsageEvent({
     type: "provider_run",
@@ -329,30 +210,6 @@ function recordProviderRun({ requestId, sessionId, mode, provider, model, status
     outputChars: outputText.length,
     error,
   });
-}
-
-function localFastPath(text) {
-  const normalized = text.trim();
-  const compact = normalized.replace(/\s+/g, "");
-  if (/^(안녕|안녕하세요|하이|hello|hi|hey)[!.?。！ㅋㅎ\s]*$/i.test(normalized)) {
-    return "안녕하세요! 무엇을 도와드릴까요?";
-  }
-
-  const math = compact.match(/^(-?\d+(?:\.\d+)?)([+\-*/×÷])(-?\d+(?:\.\d+)?)(?:이야|인가|은|는|=|\?)*$/);
-  if (math) {
-    const a = Number(math[1]);
-    const b = Number(math[3]);
-    const op = math[2];
-    let value;
-    if (op === "+") value = a + b;
-    else if (op === "-") value = a - b;
-    else if (op === "*" || op === "×") value = a * b;
-    else if (op === "/" || op === "÷") value = b === 0 ? "0으로는 나눌 수 없어요." : a / b;
-    if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(8)));
-    return value;
-  }
-
-  return null;
 }
 
 function writeSse(raw, event, data = {}) {
@@ -1597,9 +1454,8 @@ app.get("/ws", { websocket: true }, (socket, req) => {
             } else {
               // Generic provider: just use stdout (strip ANSI + noise)
               const rawOut = stripAnsi(`${stdout}\n${stderr}`);
-              let responseText = rawOut.trim();
-              // Remove common CLI noise lines
-              responseText = cleanProviderOutput(responseText);
+              // cleanOutput (from runner) strips CLI banner/noise lines.
+              let responseText = cleanOutput(rawOut);
 
               // Detect session ID for resume
               // (claude/copilot sessions are pre-set in runProviderAsync)
