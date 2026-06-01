@@ -402,9 +402,14 @@ lun -s <span class="c-str">"Redis vs Memcached for session storage?"</span></cod
 {<span class="c-key">"event"</span>:<span class="c-str">"done"</span>,<span class="c-key">"total"</span>:3,<span class="c-key">"errors"</span>:0}</code></pre>
   </div>
   <p class="section__foot"
-     data-en="Run lun --setup-rules to auto-install integration rules for Claude, Kiro, Copilot, Antigravity, and Codex in your project."
-     data-kr="lun --setup-rules를 실행하면 프로젝트에 Claude, Kiro, Copilot, Antigravity, Codex용 연동 규칙이 자동 설치됩니다.">
-    Run <code>lun --setup-rules</code> to auto-install integration rules for Claude, Kiro, Copilot, Antigravity, and Codex in your project.
+     data-en="CLI agents (Claude Code, Codex, Kiro, Copilot) can run lun in the shell themselves — no extension needed. lun --setup-rules drops a consultation rule into each agent's instructions file so they reach for lun on tough calls. (The VS Code @lun chat is a separate, editor-only integration.)"
+     data-kr="CLI 에이전트(Claude Code, Codex, Kiro, Copilot)는 확장 없이 셸에서 직접 lun을 실행할 수 있습니다. lun --setup-rules가 각 에이전트의 지시 파일에 상의 규칙을 넣어, 어려운 결정에서 lun을 찾도록 합니다. (VS Code의 @lun 채팅은 에디터 전용의 별개 통합입니다.)">
+    CLI agents (Claude Code, Codex, Kiro, Copilot) can run lun in the shell themselves — no extension needed. <code>lun --setup-rules</code> drops a consultation rule into each agent's instructions file so they reach for lun on tough calls. (The VS Code <code>@lun</code> chat is a separate, editor-only integration.)
+  </p>
+  <p class="section__foot"
+     data-en="--setup-rules edits files your agents read, so it lists every file first, asks before writing, only appends (never overwrites), and wraps its block in removable markers."
+     data-kr="--setup-rules는 에이전트가 읽는 파일을 수정하므로, 먼저 모든 파일을 보여주고, 쓰기 전에 확인을 받고, 덮어쓰지 않고 추가만 하며, 추가한 블록을 제거 가능한 마커로 감쌉니다.">
+    <code>--setup-rules</code> edits files your agents read, so it lists every file first, asks before writing, only appends (never overwrites), and wraps its block in removable markers.
   </p>
 </section>
 
