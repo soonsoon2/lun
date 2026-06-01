@@ -69,25 +69,50 @@ Lun makes this a 10-second habit instead of a 10-minute tab-switching ritual.
 
 ---
 
-## Five ways to use Lun
+## Three modes
 
-Lun runs the same engine everywhere — pick whichever fits your moment:
+Lun gives your agents three ways to work on a question. The same engine powers all of them.
 
-| # | Scenario | Command | When to reach for it |
-|---|----------|---------|----------------------|
-| 1 | **Terminal one-shot / REPL** | `lun "question"` or just `lun` | Quick gut-check from where you already work |
-| 2 | **PM chat** | `lun chat` | A conversation where Lun decides which agents to consult and synthesizes |
-| 3 | **Local web UI** | `lun serve` → `localhost:3456` | Visual group-chat with streaming, history, usage stats |
-| 4 | **VS Code / Copilot Chat** | `@lun` (install the VSIX) | Stay inside your editor |
-| 5 | **Agent-to-agent** | `lun -j "question"` | Let another AI agent consult the panel and parse NDJSON |
+### 1. Compare — `lun "question"`
 
-> **Do I need to start a daemon first?** No. `lun "question"` works on its own —
-> if no daemon is running it just spawns the agents directly. Running
-> `lun daemon start` (or `lun serve`) is optional: it keeps agents warm so
-> repeat calls skip CLI cold-start. Set `LUN_NO_DAEMON=1` to always run direct.
+Every agent answers the same question in parallel; answers stream in side by side as each finishes. Add `-s` to get a synthesized consensus on top.
 
-Each scenario is detailed below. Start with #1 — it needs nothing but one
-installed agent CLI.
+```bash
+lun "Should I use REST or GraphQL for this API?"
+lun -s "Redis vs Memcached for sessions?"   # + consensus summary
+```
+
+### 2. Debate — `lun -d` ⭐
+
+Not just parallel answers — a **relay discussion**. Each agent sees what the previous ones said and can challenge it; a moderator synthesizes each round and decides whether to continue. This is where blind spots actually surface, because the agents argue instead of just listing opinions.
+
+```bash
+lun -d "Is a monorepo the right call for a 4-person team?"
+lun -d --max-turns 2 "Critique this caching strategy"
+```
+
+### 3. PM chat — `lun chat`
+
+A conversation led by a "PM" agent that decides which specialists to consult, calls them as tools, and synthesizes — with history across turns.
+
+```bash
+lun chat
+```
+
+> **No daemon required.** `lun "question"` works on its own. Running
+> `lun daemon start` (or `lun serve`) is optional — it keeps agents warm so
+> repeat calls skip CLI cold-start. `LUN_NO_DAEMON=1` forces direct mode.
+
+## Run it anywhere
+
+The three modes are available across every surface:
+
+| Surface | How | Notes |
+|---------|-----|-------|
+| **Terminal** | `lun "q"`, `lun -d`, `lun chat`, or `lun` (REPL) | Nothing to set up beyond one agent CLI |
+| **Web UI** | `lun serve` → `localhost:3456` | Group-chat view, streaming, history, usage |
+| **VS Code / Copilot Chat** | `@lun` (install the VSIX) | Stay in your editor |
+| **Another AI agent** | `lun -j "q"` | NDJSON output; let an agent consult the panel and parse it |
 
 ---
 
@@ -129,51 +154,44 @@ agy -p "hello"
 # First time — pick language, agents, models
 lun --init
 
-# Ask all agents (results stream as they arrive)
+# Compare: ask everyone the same thing
 lun "How should I structure this microservice?"
 
-# Interactive mode — keep asking
-lun
-
-# Specific models for deeper analysis
-lun -M claude:opus,copilot:gpt-4.1 "Review this architecture"
+# Debate: let them challenge each other
+lun -d "Is a monorepo the right call for a 4-person team?"
 
 # Pipe a file as context
 cat design.md | lun "What are the risks here?"
 
-# Auto-synthesize all answers into one recommendation
-lun -s "Redis vs Memcached for session storage?"
+# Pick specific models
+lun -M claude:opus,copilot:gpt-4.1 "Review this architecture"
 ```
 
 ---
 
-## PM Chat (`lun chat`)
+## What debate looks like
 
-`lun "question"` asks every agent the same thing. **`lun chat` is different** —
-it starts a conversation led by a "PM" agent that decides which specialists to
-consult, calls them as tools, and synthesizes their answers for you.
-
-```bash
-lun chat
-```
+`lun -d` is the mode that sets Lun apart. Instead of parallel monologues, each agent sees the previous answers and pushes back, and a moderator synthesizes each round:
 
 ```
-  > How should I cache sessions, and is Redis overkill?
+$ lun -d "Tabs or spaces?"
 
-  claude (PM) is planning…
-  → consulting kiro, codex on caching trade-offs
-  ← kiro (4.1s), codex (6.2s)
+  --- Claude (5.5s) ---
+  Spaces. They render identically everywhere — no surprises from someone's
+  tab width turning aligned code into a ransom note.
 
-  For your scale, Redis is not overkill — but here's the nuance both agents
-  raised: if sessions are small and single-region, a signed cookie or
-  in-memory store may be simpler. If you need shared state across instances,
-  Redis earns its place...
+  --- Copilot (9.8s) ---
+  Tabs. One character per indent level, and accessibility wins: readers can
+  set their own width. Style guides chose spaces for historical reasons.
+
+  ━━━ Moderator Synthesis ━━━
+  Both agree consistency matters more than the choice. Recommendation: tabs
+  + .editorconfig if accessibility matters; spaces for byte-identical
+  rendering across every editor.
 ```
 
-- The PM is configurable in `lun --init` (`pmAgent` / `pmModel` in config).
-- It keeps conversation history within the session.
-- Full per-agent output is saved to the session file; the chat shows the
-  synthesis first.
+The PM chat mode (`lun chat`) is configured in `lun --init` (`pmAgent` /
+`pmModel`); it keeps history and saves each agent's full output to the session.
 
 ---
 
