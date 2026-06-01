@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.7.0] — 2026-06-01
 
 ### Added
 - **Unified workspace** (`config.workDir`, default `~/Documents/lun-workspace`).
