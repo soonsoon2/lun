@@ -1,47 +1,49 @@
 # Lun — Multi-agent Consultation
 
-When facing architecture decisions or design trade-offs, use `lun` to consult other AI coding agents.
+When facing architecture decisions or design trade-offs, use `lun` to consult other AI coding agents before committing.
 
 ## When to use
 
 - Design decisions with multiple valid approaches
 - Architecture review
-- User requests "other opinions" or "second opinion"
+- User requests "other opinions" or a "second opinion"
 
 ## Commands
 
 ```bash
-# All agents
+# Ask every configured agent (streamed NDJSON)
 lun -j "question"
 
-# Specific models
-lun -j -M kiro:claude-sonnet-4.6,claude:opus,copilot:gpt-4.1 "question"
+# Specific providers / models
+lun -j -P kiro,claude,copilot "question"
+lun -j -M claude:opus,copilot:gpt-5.4 "question"
 
 # File context
 cat file.md | lun -j "review"
 
-# With synthesis
+# Add a synthesized recommendation
 lun -j -s "question"
 ```
 
-## Models
+## Output format
 
-- kiro: auto, claude-opus-4.6, claude-sonnet-4.6, claude-haiku-4.5, deepseek-3.2
-- claude: sonnet (default), opus, haiku
-- copilot: auto (default), gpt-5.2, gpt-4.1, o3
+`-j` streams **NDJSON — one JSON object per line** (not a single object):
 
-## Output format (--json)
-
-```json
-{
-  "prompt": "...",
-  "results": [
-    { "provider": "kiro", "model": "auto", "text": "...", "elapsed": 4.2 },
-    { "provider": "claude", "model": "opus", "text": "...", "elapsed": 3.8 }
-  ]
-}
+```jsonl
+{"event":"start","providers":["kiro","claude","copilot"]}
+{"event":"result","provider":"kiro","model":"glm-5","text":"...","elapsed":4.2,"error":false}
+{"event":"result","provider":"claude","model":"opus","text":"...","elapsed":3.8,"error":false}
+{"event":"done","total":3,"errors":0}
 ```
+
+## Models (run `lun -l` for what's installed)
+
+- kiro: `auto`, `glm-5`
+- claude: `sonnet` (default), `opus`, `haiku`
+- copilot: `auto`, `gpt-5.4`, `claude-sonnet-4.6`
+- codex: `gpt-5.4` (default), `gpt-5.5`, `gpt-5.3-codex`
+- agy: `auto`
 
 ## After results
 
-Parse results, identify consensus/disagreements, present summary with recommendation.
+Parse each `result` line, identify consensus/disagreements, present a summary with your recommendation.

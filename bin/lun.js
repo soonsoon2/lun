@@ -661,56 +661,101 @@ async function cmdDaemon(action = "foreground") {
 async function cmdSetupRules() {
   printBanner();
   console.log(`  \x1b[1mSetup agent rules for this project\x1b[0m\n`);
-  console.log(`  This will add lun consultation rules so your AI agents`);
-  console.log(`  know how to use lun for multi-agent opinions.\n`);
 
   const cwd = process.cwd();
   const rulesDir = join(__dirname, "..", "rules");
 
   const targets = [
-    { id: "claude", file: "claude.md", dest: "CLAUDE.md", append: true, desc: "Claude Code (CLAUDE.md)" },
-    { id: "kiro", file: "kiro.md", dest: ".kiro/steering/lun.md", append: false, desc: "Kiro (.kiro/steering/lun.md)" },
-    { id: "copilot", file: "copilot.md", dest: ".github/copilot-instructions.md", append: true, desc: "Copilot (.github/copilot-instructions.md)" },
-    { id: "agy", file: "agy.md", dest: ".antigravity/AGENTS.md", append: true, desc: "Antigravity (.antigravity/AGENTS.md)" },
-    { id: "codex", file: "codex.md", dest: "AGENTS.md", append: true, desc: "Codex / OpenAI (AGENTS.md)" },
+    { id: "claude", file: "claude.md", dest: "CLAUDE.md", append: true, desc: "Claude Code" },
+    { id: "kiro", file: "kiro.md", dest: ".kiro/steering/lun.md", append: false, desc: "Kiro" },
+    { id: "copilot", file: "copilot.md", dest: ".github/copilot-instructions.md", append: true, desc: "Copilot" },
+    { id: "agy", file: "agy.md", dest: ".antigravity/AGENTS.md", append: true, desc: "Antigravity" },
+    { id: "codex", file: "codex.md", dest: "AGENTS.md", append: true, desc: "Codex / OpenAI" },
   ];
 
+  // Markers so appended blocks are identifiable and removable by hand later.
+  const BEGIN = "<!-- BEGIN lun rules -->";
+  const END = "<!-- END lun rules -->";
+
+  // --- Upfront warning: this writes into files YOUR agents read. ---
+  console.log(`  \x1b[33m⚠  This modifies instruction files in the current directory.\x1b[0m`);
+  console.log(`  \x1b[90m  Your AI agents read these files, so adding lun rules will change`);
+  console.log(`  how those agents behave (they'll start consulting lun on decisions).`);
+  console.log(`  Existing files are appended to (never overwritten); new ones are created.`);
+  console.log(`  Appended blocks are wrapped in "${BEGIN}" markers so you can remove them.\x1b[0m\n`);
+  console.log(`  \x1b[1mDirectory:\x1b[0m ${cwd}\n`);
+  console.log(`  \x1b[1mFiles that may change:\x1b[0m`);
+  for (const target of targets) {
+    const exists = existsSync(join(cwd, target.dest));
+    const action = !exists ? "create" : (target.append ? "append" : "overwrite");
+    const color = action === "overwrite" ? "\x1b[33m" : "\x1b[90m";
+    console.log(`    ${color}${action.padEnd(9)}\x1b[0m ${target.dest}  \x1b[90m(${target.desc})\x1b[0m`);
+  }
+  console.log("");
+
+  const proceedRl = createInterface({ input: process.stdin, output: process.stdout });
+  let stdinClosed = false;
+  proceedRl.on("close", () => { stdinClosed = true; });
+  const ask = (q) => new Promise(resolve => {
+    if (stdinClosed) return resolve("");
+    proceedRl.question(q, a => resolve(a));
+  });
+
+  const proceed = await ask(`  Continue? You'll still confirm each file individually. (y/n) `);
+  if (proceed.trim().toLowerCase() !== "y") {
+    proceedRl.close();
+    console.log(`\n  \x1b[90mCancelled. No files were changed.\x1b[0m\n`);
+    return;
+  }
+  console.log("");
+
+  let changed = 0;
   for (const target of targets) {
     const destPath = join(cwd, target.dest);
     const srcPath = join(rulesDir, target.file);
     const exists = existsSync(destPath);
 
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const answer = await new Promise(resolve => {
-      const action = exists && target.append ? "append to" : "create";
-      rl.question(`  ${action} ${target.desc}? (y/n) `, resolve);
-    });
-    rl.close();
-
-    if (answer.trim().toLowerCase() === "y") {
-      const content = readFileSync(srcPath, "utf-8");
-      const dir = join(cwd, target.dest.split("/").slice(0, -1).join("/"));
-      if (dir && dir !== cwd) mkdirSync(dir, { recursive: true });
-
-      if (exists && target.append) {
-        const existing = readFileSync(destPath, "utf-8");
-        if (!existing.includes("lun")) {
-          writeFileSync(destPath, existing + "\n\n" + content);
-          console.log(`    \x1b[32mv\x1b[0m Appended to ${target.dest}`);
-        } else {
-          console.log(`    \x1b[90m- Already contains lun rules, skipped\x1b[0m`);
-        }
-      } else {
-        mkdirSync(join(cwd, target.dest.split("/").slice(0, -1).join("/")), { recursive: true });
-        writeFileSync(destPath, content);
-        console.log(`    \x1b[32mv\x1b[0m Created ${target.dest}`);
+    // Skip if lun rules already present (idempotent).
+    if (exists) {
+      const existing = readFileSync(destPath, "utf-8");
+      if (existing.includes(BEGIN) || existing.includes("Lun — Multi-agent")) {
+        console.log(`    \x1b[90m- ${target.dest} already has lun rules, skipped\x1b[0m`);
+        continue;
       }
-    } else {
-      console.log(`    \x1b[90m- Skipped\x1b[0m`);
     }
-  }
 
-  console.log(`\n  \x1b[32mDone.\x1b[0m Your agents can now use lun for consultations.\n`);
+    const action = !exists ? "create" : (target.append ? "append to" : "overwrite");
+    const warn = action === "overwrite" ? " \x1b[33m(overwrites existing!)\x1b[0m" : "";
+    const answer = await ask(`  ${action} ${target.dest}?${warn} (y/n) `);
+
+    if (answer.trim().toLowerCase() !== "y") {
+      console.log(`    \x1b[90m- Skipped\x1b[0m`);
+      continue;
+    }
+
+    const content = readFileSync(srcPath, "utf-8");
+    const block = `${BEGIN}\n${content}\n${END}`;
+    const dir = join(cwd, target.dest.split("/").slice(0, -1).join("/"));
+    if (dir && dir !== cwd) mkdirSync(dir, { recursive: true });
+
+    if (exists && target.append) {
+      const existing = readFileSync(destPath, "utf-8");
+      writeFileSync(destPath, existing.trimEnd() + "\n\n" + block + "\n");
+      console.log(`    \x1b[32mv\x1b[0m Appended to ${target.dest}`);
+    } else {
+      writeFileSync(destPath, block + "\n");
+      console.log(`    \x1b[32mv\x1b[0m ${exists ? "Wrote" : "Created"} ${target.dest}`);
+    }
+    changed++;
+  }
+  proceedRl.close();
+
+  if (changed > 0) {
+    console.log(`\n  \x1b[32mDone.\x1b[0m ${changed} file(s) updated. Your agents can now use lun.`);
+    console.log(`  \x1b[90mTip: review the changes with \`git diff\` before committing.\x1b[0m\n`);
+  } else {
+    console.log(`\n  \x1b[90mNothing changed.\x1b[0m\n`);
+  }
 }
 
 // ============================================================

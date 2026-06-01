@@ -1,55 +1,59 @@
 # Lun — Multi-agent Consultation Rule
 
-When facing architecture decisions, design trade-offs, or implementation strategy choices, consult other AI agents using `lun` before proceeding.
+When facing architecture decisions, design trade-offs, or implementation strategy choices, consult other AI agents using `lun` before committing to an approach.
 
 ## When to use
 
 - Choosing between competing approaches (REST vs GraphQL, monorepo vs polyrepo, etc.)
 - Reviewing architecture or system design
 - Evaluating trade-offs where multiple valid options exist
-- When the user asks for "other opinions" or "second opinion"
+- When the user asks for "other opinions" or a "second opinion"
 
 ## How to use
 
 ```bash
-# Basic query — all agents respond
+# Ask every configured agent (streamed NDJSON)
 lun -j "your question here"
 
-# With specific models for deeper analysis
-lun -j -M kiro:claude-sonnet-4.6,claude:opus,copilot:gpt-4.1 "your question"
+# Pick specific providers
+lun -j -P kiro,claude,copilot "your question"
+
+# Pick specific models for deeper analysis
+lun -j -M claude:opus,copilot:gpt-5.4 "your question"
 
 # Include file context
 cat relevant-file.md | lun -j "review this design"
 
-# With synthesis (auto-summarize all answers)
+# Add a synthesized recommendation across all answers
 lun -j -s "your question"
 ```
 
-## Available models
-
-| Provider | Models |
-|----------|--------|
-| kiro | auto, claude-opus-4.6, claude-sonnet-4.6, claude-haiku-4.5, deepseek-3.2 |
-| claude | sonnet (default), opus, haiku |
-| copilot | auto (default), gpt-5.2, gpt-4.1, o3, claude-sonnet-4.6 |
-
 ## Output format
 
-The `-j` flag returns JSON:
-```json
-{
-  "prompt": "...",
-  "results": [
-    { "provider": "kiro", "model": "auto", "text": "...", "elapsed": 4.2 },
-    { "provider": "claude", "model": "opus", "text": "...", "elapsed": 3.8 },
-    { "provider": "copilot", "model": "auto", "text": "...", "elapsed": 5.1 }
-  ]
-}
+`-j` streams **NDJSON — one JSON object per line** (not a single object). Read it line by line:
+
+```jsonl
+{"event":"start","providers":["kiro","claude","copilot"]}
+{"event":"result","provider":"claude","model":"opus","text":"...","elapsed":3.8,"error":false}
+{"event":"result","provider":"kiro","model":"glm-5","text":"...","elapsed":5.2,"error":false}
+{"event":"done","total":3,"errors":0}
 ```
+
+Each `result` event is one agent's full answer. Results arrive as each agent finishes.
+
+## Models (examples — run `lun --list` / `lun -l` for what's installed)
+
+| Provider | Common models |
+|----------|---------------|
+| kiro | `auto`, `glm-5` |
+| claude | `sonnet` (default), `opus`, `haiku` |
+| copilot | `auto`, `gpt-5.4`, `claude-sonnet-4.6`, `claude-haiku-4.5` |
+| codex | `gpt-5.4` (default), `gpt-5.5`, `gpt-5.3-codex` |
+| agy | `auto` |
 
 ## After receiving results
 
-1. Read each agent's response
-2. Identify consensus points and disagreements
-3. Present a summary to the user with your recommendation
-4. Cite which agents agreed/disagreed on key points
+1. Read each `result` event's `text`.
+2. Identify consensus points and disagreements.
+3. Present a short summary to the user with your recommendation.
+4. Cite which agents agreed/disagreed on key points.

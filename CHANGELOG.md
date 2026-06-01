@@ -24,6 +24,12 @@
 - Install path is now GitHub-based: `npm install -g github:soonsoon2/lun`.
 - `package.json` gained `repository`, `bugs`, `homepage`, `author`, and a
   `test` script.
+- **`lun --setup-rules` is safer**: shows which files will be created/appended,
+  requires explicit confirmation before writing, never overwrites existing
+  files (appends only), wraps added content in removable markers, and skips
+  files that already have lun rules.
+- Refreshed agent rule templates: correct **NDJSON** output format (was shown
+  as a single JSON object) and current model names.
 
 ### Security
 - Documented the security model in `SECURITY.md`: auto-approved agent tool use

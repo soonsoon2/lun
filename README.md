@@ -209,7 +209,16 @@ Or auto-install rules for all agents:
 lun --setup-rules
 ```
 
-This creates rule files for Claude (`CLAUDE.md`), Kiro (`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`), Antigravity, and Codex.
+This adds lun consultation rules for Claude (`CLAUDE.md`), Kiro
+(`.kiro/steering/lun.md`), Copilot (`.github/copilot-instructions.md`),
+Antigravity, and Codex.
+
+> **It edits files your agents read,** which changes how they behave. So it
+> shows exactly which files will be created or appended, asks you to confirm
+> before anything is written, and then confirms each file individually.
+> Existing files are appended to (never overwritten), and the added block is
+> wrapped in `<!-- BEGIN lun rules -->` / `<!-- END lun rules -->` markers so
+> you can find and remove it. Review with `git diff` afterward.
 
 ---
 
