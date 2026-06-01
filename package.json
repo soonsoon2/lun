@@ -1,10 +1,13 @@
 {
-  "name": "lun",
+  "name": "@soonsoon2/lun",
   "version": "1.6.0",
   "description": "Multi-agent consensus CLI — ask multiple AI agents and compare answers",
   "type": "module",
   "author": "SOONSOON (https://github.com/soonsoon2)",
   "homepage": "https://lun.soonsoon.io",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/soonsoon2/lun.git"
@@ -40,8 +43,7 @@
     "extensions/",
     "server.js",
     "README.md",
-    "LICENSE",
-    "lun-image.png"
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.0.0"

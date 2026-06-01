@@ -11,6 +11,7 @@
 > Not sure about that AI answer?
 > Ask multiple agents at once and compare.
 
+[![npm](https://img.shields.io/npm/v/@soonsoon2/lun?style=flat-square&color=cb3837&logo=npm)](https://www.npmjs.com/package/@soonsoon2/lun)
 [![GitHub](https://img.shields.io/badge/install-github-181717?style=flat-square&logo=github)](https://github.com/soonsoon2/lun)
 [![CI](https://img.shields.io/github/actions/workflow/status/soonsoon2/lun/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/soonsoon2/lun/actions)
 [![license](https://img.shields.io/github/license/soonsoon2/lun?style=flat-square)](LICENSE)
@@ -92,11 +93,11 @@ installed agent CLI.
 
 ## Install
 
-Install straight from GitHub:
-
 ```bash
-npm install -g github:soonsoon2/lun
+npm install -g @soonsoon2/lun
 ```
+
+The command is `lun`. (Installs from npm; `npm install -g github:soonsoon2/lun` also works for the latest `main`.)
 
 You need at least one AI agent CLI installed:
 

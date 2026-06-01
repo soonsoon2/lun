@@ -21,7 +21,8 @@
 - **`lun.soonsoon.io`** landing page.
 
 ### Changed
-- Install path is now GitHub-based: `npm install -g github:soonsoon2/lun`.
+- Published to npm as **`@soonsoon2/lun`** (`npm install -g @soonsoon2/lun`).
+  Installing from GitHub (`github:soonsoon2/lun`) also still works.
 - `package.json` gained `repository`, `bugs`, `homepage`, `author`, and a
   `test` script.
 - **`lun --setup-rules` is safer**: shows which files will be created/appended,
