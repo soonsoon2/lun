@@ -27,9 +27,9 @@
 
 ## What is Lun?
 
-**Lun (論)** is a CLI tool that asks multiple AI coding agents the same question in parallel and shows you their answers side-by-side — so you can spot consensus, catch blind spots, and make better design decisions.
+**Lun (論)** runs the AI coding agent CLIs you **already use** — Kiro, Claude Code, GitHub Copilot, Antigravity, Codex — on the same question, side by side. Compare their answers, or let them debate each other.
 
-Currently supports **Kiro, Claude Code, GitHub Copilot, Antigravity, and Codex**. Cline is also defined as an optional provider when its CLI is available.
+Most multi-model tools want your API keys and bill you per token. Lun doesn't: it drives the CLIs you've already installed and logged into, so there are **no extra API keys and no extra bills**. Cline is also defined as an optional provider when its CLI is available.
 
 ```
 $ lun "Should I use REST or GraphQL for this API?"
