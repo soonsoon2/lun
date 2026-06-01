@@ -5,3 +5,21 @@ _data/
 raw_capture.json
 .gemini/
 .vscode/
+
+# Secrets / env — never commit
+.env
+.env.*
+*.pem
+*.key
+
+# Local-only dev/bench/debug scripts (not for distribution)
+demo/*.mjs
+test-ws-codex.js
+bench-*.sh
+test-scenarios.sh
+
+# Internal design work (image-gen scripts contain dev API keys — local only)
+design/
+
+# Local agent work area
+lun-workspace/
