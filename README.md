@@ -18,6 +18,12 @@
 
 ---
 
+![Lun in action — asking three agents one question](./demo/lun-demo.gif)
+
+> A real run: `lun -P claude,kiro,copilot "REST or GraphQL?"` — answers stream in as each agent finishes.
+
+---
+
 ## What is Lun?
 
 **Lun (論)** is a CLI tool that asks multiple AI coding agents the same question in parallel and shows you their answers side-by-side — so you can spot consensus, catch blind spots, and make better design decisions.
