@@ -305,9 +305,10 @@ lun serve
 # → http://localhost:3456
 ```
 
-`lun serve` runs with warm workers (daemon mode) for the life of the process,
-and shuts down when you close the browser tab. It binds to `127.0.0.1` only —
-see [SECURITY.md](SECURITY.md) before changing `LUN_HOST`.
+`lun serve` runs with warm workers (daemon mode) for the life of the process
+and stays up until you stop it with Ctrl+C. It binds to `127.0.0.1` only —
+see [SECURITY.md](SECURITY.md) before changing `LUN_HOST`. (To auto-exit when
+the browser tab closes — e.g. for an app wrapper — set `LUN_SERVE_AUTOEXIT=1`.)
 
 Custom port:
 ```bash
@@ -420,6 +421,7 @@ sessions stored somewhere else.
 | `LUN_HOST` | `127.0.0.1` | Web UI bind address |
 | `LUN_USE_CWD` | unset | Set to `1` to run agents in the current directory instead of the configured work dir |
 | `LUN_NO_DAEMON` | unset | Set to `1` to always run agents directly, skipping the daemon |
+| `LUN_SERVE_AUTOEXIT` | unset | Set to `1` to make `lun serve` exit when the browser tab closes (off by default) |
 | `LUN_PREWARM_WORKERS` | `1` | Set to `0` to skip daemon worker prewarm on startup |
 | `LUN_DISABLE_ACP_WORKER` | unset | Set to `1` to force Kiro/Copilot back to spawn-per-turn mode |
 | `LUN_ACP_REUSE_SESSION` | unset | Set to `1` to reuse Kiro/Copilot ACP sessions across prompts |

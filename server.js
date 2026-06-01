@@ -36,7 +36,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LUN_PORT || process.env.PORT || 3456);
 const HOST = process.env.LUN_HOST || process.env.HOST || "127.0.0.1";
 const IS_DAEMON = process.env.LUN_DAEMON === "1";
-const IS_SERVE = process.env.LUN_SERVE === "1"; // browser-lifecycle mode (close tab => exit)
+const IS_SERVE = process.env.LUN_SERVE_AUTOEXIT === "1" || process.env.LUN_SERVE === "1"; // opt-in: exit when the browser tab closes
 const DATA_DIR = join(__dirname, "_data");
 const THREADS_DIR = join(DATA_DIR, "threads");
 let actualPort = PORT;

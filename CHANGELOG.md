@@ -31,6 +31,12 @@
 - Refreshed agent rule templates: correct **NDJSON** output format (was shown
   as a single JSON object) and current model names.
 
+### Fixed
+- `lun serve` no longer auto-exits while a tab is open. The browser-lifecycle
+  shutdown was firing on a timing race (and tripped a Node "unsettled top-level
+  await" warning). It's now opt-in via `LUN_SERVE_AUTOEXIT=1`; by default the
+  server runs until Ctrl+C.
+
 ### Security
 - Documented the security model in `SECURITY.md`: auto-approved agent tool use
   and the unauthenticated localhost server.

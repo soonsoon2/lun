@@ -437,8 +437,9 @@ async function cmdServe() {
     stdio: "inherit",
     // LUN_DAEMON=1 makes serve a live Lun environment: workers are prewarmed
     // and stay warm for as long as the web UI process is running.
-    // LUN_SERVE=1 enables browser-lifecycle shutdown (close tab => exit).
-    env: { ...process.env, LUN_PORT: String(port), LUN_DAEMON: "1", LUN_SERVE: "1" },
+    // The server runs until you stop it (Ctrl+C). To auto-exit when the
+    // browser tab closes (e.g. for an app wrapper), set LUN_SERVE_AUTOEXIT=1.
+    env: { ...process.env, LUN_PORT: String(port), LUN_DAEMON: "1" },
   });
 
   child.on("error", (err) => {
@@ -446,7 +447,12 @@ async function cmdServe() {
     process.exit(1);
   });
 
-  await new Promise(() => {});
+  // Keep this process alive for as long as the server child runs, then mirror
+  // its exit code. (Awaiting a never-resolving promise trips Node's
+  // "unsettled top-level await" warning, so we tie to the child's lifecycle.)
+  await new Promise((resolve) => {
+    child.on("exit", (code) => { process.exitCode = code ?? 0; resolve(); });
+  });
 }
 
 async function pingDaemon(url) {
@@ -652,7 +658,10 @@ async function cmdDaemon(action = "foreground") {
     process.exit(1);
   });
 
-  await new Promise(() => {});
+  // Stay alive for the child's lifetime, then mirror its exit code.
+  await new Promise((resolve) => {
+    child.on("exit", (code) => { process.exitCode = code ?? 0; resolve(); });
+  });
 }
 
 // ============================================================
