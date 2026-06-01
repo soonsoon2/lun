@@ -473,8 +473,8 @@ function addPM(text,elapsed,model){
   hide();
   const m=el("div","msg pm");
   const time=elapsed?`${elapsed}s`:"";
-  const meta=[model||"sonnet",time].filter(Boolean).join(" · ");
-  m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">pm/${model||"sonnet"}</span></div><div class="msg-body">${md(text||"")}</div><div class="msg-meta">${esc(meta)}</div></div>`;
+  const meta=[model||"auto",time].filter(Boolean).join(" · ");
+  m.innerHTML=`<div class="msg-content"><div class="msg-header"><span class="agent-tag">pm/${model||"auto"}</span></div><div class="msg-body">${md(text||"")}</div><div class="msg-meta">${esc(meta)}</div></div>`;
   chatInner.appendChild(m);scroll();
 }
 
@@ -717,7 +717,7 @@ function connect(){
       case"thinking":break;
       case"provider-thinking":addTyping(msg.provider);break;
       case"provider-response":addAgent(msg.provider,msg.text,msg.elapsed,msg.model);break;
-      case"moderator-msg":addPM(msg.text,msg.elapsed);break;
+      case"moderator-msg":addPM(msg.text,msg.elapsed,msg.model);break;
       case"system":addSys(msg.text);break;
       case"discuss-turn":addRoundDivider(msg.turn);break;
       case"done":waiting=false;statusDot.className="dot on";inp.disabled=false;snd.disabled=false;inp.focus();loadSessions();{const sb=document.getElementById("stopBtn");if(sb)sb.style.display="none";}break;

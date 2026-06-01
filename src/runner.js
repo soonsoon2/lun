@@ -191,10 +191,12 @@ export async function runAll(prompt, options = {}) {
   const { providers = Object.keys(PROVIDERS), models = {}, cwd, timeout } = options;
 
   return Promise.all(providers.map(async (pid) => {
+    const model = models[pid] || PROVIDERS[pid]?.defaultModel || "auto";
     try {
-      return await runProvider(pid, prompt, { model: models[pid], cwd, timeout });
+      const r = await runProvider(pid, prompt, { model: models[pid], cwd, timeout });
+      return { model, ...r };
     } catch (err) {
-      return { text: `[Error] ${err.message}`, elapsed: 0, sessionId: null, provider: pid, error: true };
+      return { text: `[Error] ${err.message}`, elapsed: 0, sessionId: null, provider: pid, model, error: true };
     }
   }));
 }

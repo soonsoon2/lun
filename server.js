@@ -1167,7 +1167,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
               const maxTime = msg.maxTime === 0 ? 0 : (msg.maxTime || config.autoDiscuss?.maxTime || 120);
               const technique = msg.technique || "auto";
 
-              socket.send(JSON.stringify({ type: "moderator-msg", text: `Moderating a relay discussion on:\n\n"${text}"` }));
+              socket.send(JSON.stringify({ type: "moderator-msg", text: `Moderating a relay discussion on:\n\n"${text}"`, model: moderatorModel }));
 
               discuss(text, availableProviders, {
                 moderator: moderatorId,
@@ -1185,14 +1185,14 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 onTurnStart: (turn, question, tech) => {
                   socket.send(JSON.stringify({ type: "discuss-turn", turn }));
                   if (turn > 1) {
-                    socket.send(JSON.stringify({ type: "moderator-msg", text: `Round ${turn} — following up:\n\n"${question}"` }));
+                    socket.send(JSON.stringify({ type: "moderator-msg", text: `Round ${turn} — following up:\n\n"${question}"`, model: moderatorModel }));
                   }
                 },
                 onPanelistStart: (pid) => {
                   socket.send(JSON.stringify({ type: "provider-thinking", provider: pid }));
                 },
                 onResult: (r) => {
-                  socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model }));
+                  socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model || config.models?.[r.provider] || "auto" }));
                   recordProviderRun({
                     requestId,
                     sessionId,
@@ -1207,7 +1207,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                   });
                 },
                 onSynthesis: (synthesisText, elapsed, turn) => {
-                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Round ${turn} synthesis**\n\n${synthesisText}`, elapsed }));
+                  socket.send(JSON.stringify({ type: "moderator-msg", text: `**Round ${turn} synthesis**\n\n${synthesisText}`, elapsed, model: moderatorModel }));
                   recordProviderRun({
                     requestId,
                     sessionId,
@@ -1224,7 +1224,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 },
               }).then((result) => {
                 const stoppedNote = stopRequested ? " (stopped by user)" : "";
-                socket.send(JSON.stringify({ type: "moderator-msg", text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s, style: ${result.technique}${stoppedNote}.` }));
+                socket.send(JSON.stringify({ type: "moderator-msg", text: `**Discussion complete** — ${result.turns.length} round(s), ${result.totalTime}s, style: ${result.technique}${stoppedNote}.`, model: moderatorModel }));
                 try {
                   const session = new Session();
                   for (const t of result.turns) {
@@ -1261,7 +1261,7 @@ app.get("/ws", { websocket: true }, (socket, req) => {
                 socket.send(JSON.stringify({ type: "provider-chunk", provider, delta }));
               },
               onResult: (r) => {
-                socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model }));
+                socket.send(JSON.stringify({ type: "provider-response", provider: r.provider, text: r.text, elapsed: r.elapsed, model: r.model || cfg.models?.[r.provider] || "auto" }));
                 recordProviderRun({
                   requestId,
                   sessionId,

@@ -153,6 +153,7 @@ export async function moderatedQuery(prompt, availableProviders, options = {}) {
   // 2. Execute against selected providers
   const results = [];
   const promises = plan.providers.map(async (pid) => {
+    const model = models[pid] || PROVIDERS[pid]?.defaultModel || "auto";
     try {
       const r = await runProvider(pid, prompt, {
         model: models[pid],
@@ -160,12 +161,12 @@ export async function moderatedQuery(prompt, availableProviders, options = {}) {
         timeout,
         onChunk: onChunk ? (provider, delta) => onChunk(provider, delta) : undefined,
       });
-      const result = { ...r, routed: true };
+      const result = { ...r, model, routed: true };
       results.push(result);
       if (onResult) onResult(result);
       return result;
     } catch (err) {
-      const result = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true, routed: true };
+      const result = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, model, error: true, routed: true };
       results.push(result);
       if (onResult) onResult(result);
       return result;
@@ -422,11 +423,12 @@ export async function discuss(originalPrompt, availableProviders, options = {}) 
       });
       try {
         const r = await runProvider(pid, relayPrompt, { model: models[pid], timeout: turnTimeout });
+        r.model = r.model || models[pid] || PROVIDERS[pid]?.defaultModel || "auto";
         results.push(r);
         priorTurns.push({ provider: pid, text: r.text });
         if (onResult) onResult(r);
       } catch (err) {
-        const r = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, error: true };
+        const r = { text: `[Error] ${err.message}`, elapsed: 0, provider: pid, model: models[pid] || PROVIDERS[pid]?.defaultModel || "auto", error: true };
         results.push(r);
         if (onResult) onResult(r);
       }
