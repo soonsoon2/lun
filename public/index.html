@@ -274,6 +274,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 /* Answer modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(5,5,8,.7);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px)}
 .modal{width:min(720px,92vw);max-height:82vh;background:var(--bg-overlay);border:1px solid var(--border-strong);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.modal--wide{width:min(960px,94vw);max-height:88vh}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-subtle)}
 .am-title{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)}
 .am-title.kiro{color:var(--kiro)}.am-title.claude{color:var(--claude)}.am-title.copilot{color:var(--copilot)}.am-title.agy{color:var(--agy)}.am-title.codex{color:var(--codex)}
@@ -388,6 +389,13 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
   </div>
 </div>
 
+<div class="modal-overlay" id="panelModal" style="display:none">
+  <div class="modal modal--wide">
+    <div class="modal-head"><span class="am-title" id="panelTitle">settings</span><button class="modal-x" id="panelClose">×</button></div>
+    <div class="modal-body" id="panelBody"></div>
+  </div>
+</div>
+
 <script>
 const chat=document.getElementById("chat"),chatInner=document.getElementById("chatInner"),wel=document.getElementById("wel"),inp=document.getElementById("inp"),snd=document.getElementById("snd"),statusDot=document.getElementById("statusDot"),sessList=document.getElementById("sessList"),crumbMode=document.getElementById("crumbMode"),inputArea=document.getElementById("inputArea");
 let ws=null,waiting=false,composing=false,mode="lun";
@@ -396,22 +404,34 @@ let activeAgents=new Set();
 
 // Mode pills
 document.querySelectorAll(".mode-pill").forEach(p=>p.addEventListener("click",()=>{
+  const m=p.dataset.mode;
+  const isPanel=(m==="usage"||m==="logs"||m==="workers"||m==="settings");
+  // Panels open in a modal overlay — they never replace the conversation.
+  if(isPanel){
+    if(m==="workers")renderWorkers();
+    if(m==="usage")renderUsage();
+    if(m==="logs")renderLogs();
+    if(m==="settings")renderSettings();
+    return;
+  }
   document.querySelectorAll(".mode-pill").forEach(x=>x.classList.remove("active"));
   p.classList.add("active");
-  mode=p.dataset.mode;
-  crumbMode.textContent=mode==="workers"?"agents":mode;
-  const isPanel=(mode==="usage"||mode==="logs"||mode==="workers"||mode==="settings");
-  inputArea.style.display=isPanel?"none":"block";
+  mode=m;
+  crumbMode.textContent=mode;
+  inputArea.style.display="block";
   inp.placeholder=mode==="lun"?"ask Lun anything — it consults the panel for you...":mode==="discuss"?"a question for the panel to debate...":"ask all agents the same question...";
   // mode-specific control bar
   const dc=document.getElementById("discussCtl"), lc=document.getElementById("lunCtl");
   if(dc)dc.style.display=mode==="discuss"?"flex":"none";
   if(lc)lc.style.display=mode==="lun"?"flex":"none";
-  if(mode==="workers")renderWorkers();
-  if(mode==="usage")renderUsage();
-  if(mode==="logs")renderLogs();
-  if(mode==="settings")renderSettings();
 }));
+
+// Panel modal helpers — render dashboards/settings without touching the chat.
+const panelModal=document.getElementById("panelModal"),panelBody=document.getElementById("panelBody"),panelTitle=document.getElementById("panelTitle");
+function openPanel(title){panelTitle.textContent=title;panelBody.innerHTML='<div class="dash-empty">loading…</div>';panelModal.style.display="flex";}
+function closePanel(){panelModal.style.display="none";}
+document.getElementById("panelClose")?.addEventListener("click",closePanel);
+panelModal.addEventListener("click",(e)=>{if(e.target.id==="panelModal")closePanel();});
 
 function el(t,c){const e=document.createElement("div");if(c)e.className=c;return e}
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
@@ -499,8 +519,7 @@ function fmtCost(usd){if(usd==null)return "-";if(usd===0)return "$0";if(usd<0.01
 function fmtTime(ts){try{return new Date(ts).toLocaleString()}catch{return ts||""}}
 
 async function renderUsage(){
-  hide();
-  chatInner.innerHTML='<div class="dash-empty">loading usage...</div>';
+  openPanel("usage");
   try{
     const [uRes,dRes]=await Promise.all([fetch("/api/usage"),fetch("/api/daemon")]);
     const usage=await uRes.json();
@@ -508,7 +527,7 @@ async function renderUsage(){
     const t=usage.totals||{};
     const providers=usage.providers||[];
     const recent=usage.recent||[];
-    chatInner.innerHTML=`<div class="dash">
+    panelBody.innerHTML=`<div class="dash">
       <div class="dash-grid">
         <div class="metric"><div class="k">runs</div><div class="v">${t.runs||0}</div></div>
         <div class="metric"><div class="k">ok</div><div class="v">${t.ok||0}</div></div>
@@ -522,35 +541,33 @@ async function renderUsage(){
       ${recent.length?`<table class="dash-table"><thead><tr><th>time</th><th>mode</th><th>provider</th><th>status</th><th>latency</th><th>output</th><th>est. cost</th></tr></thead><tbody>${recent.slice(0,20).map(r=>`<tr><td>${esc(fmtTime(r.ts))}</td><td>${esc(r.mode||"")}</td><td>${esc(r.provider||"")}</td><td>${esc(r.status||"")}</td><td>${fmtMs(r.latencyMs)}</td><td>${r.outputChars||0}</td><td>${fmtCost(r.costUsd)}</td></tr>`).join("")}</tbody></table>`:""}
     </div>`;
   }catch(e){
-    chatInner.innerHTML=`<div class="dash-empty">usage unavailable</div>`;
+    panelBody.innerHTML=`<div class="dash-empty">usage unavailable</div>`;
   }
 }
 
 async function renderLogs(){
-  hide();
-  chatInner.innerHTML='<div class="dash-empty">loading logs...</div>';
+  openPanel("logs");
   try{
     const r=await fetch("/api/logs?limit=200");
     const d=await r.json();
     const logs=d.logs||[];
-    chatInner.innerHTML=`<div class="dash">
+    panelBody.innerHTML=`<div class="dash">
       <div class="dash-path">${esc(d.path||"")}</div>
       ${logs.length?`<table class="dash-table"><thead><tr><th>time</th><th>level</th><th>message</th><th>detail</th></tr></thead><tbody>${logs.slice().reverse().map(l=>`<tr><td>${esc(fmtTime(l.ts))}</td><td>${esc(l.level||"info")}</td><td>${esc(l.message||"")}</td><td>${esc(JSON.stringify(Object.fromEntries(Object.entries(l).filter(([k])=>!["ts","level","message"].includes(k))))).slice(0,240)}</td></tr>`).join("")}</tbody></table>`:`<div class="dash-empty">no logs yet</div>`}
     </div>`;
   }catch(e){
-    chatInner.innerHTML=`<div class="dash-empty">logs unavailable</div>`;
+    panelBody.innerHTML=`<div class="dash-empty">logs unavailable</div>`;
   }
 }
 
 async function renderWorkers(){
-  hide();
-  chatInner.innerHTML='<div class="dash-empty">loading agents...</div>';
+  openPanel("agents");
   try{
     const r=await fetch("/api/workers");
     const d=await r.json();
     const workers=d.workers||[];
     const warmCount=workers.filter(w=>w.alive&&w.ready).length;
-    chatInner.innerHTML=`<div class="dash">
+    panelBody.innerHTML=`<div class="dash">
       <div class="dash-head">
         <div class="dash-title">agents <span class="dash-sub">${warmCount}/${workers.length} warm</span></div>
         <button class="ctl-btn" id="restartAll">restart all</button>
@@ -580,7 +597,7 @@ async function renderWorkers(){
     document.getElementById("restartAll")?.addEventListener("click",()=>restartWorker(null));
     document.querySelectorAll("[data-restart]").forEach(b=>b.addEventListener("click",()=>restartWorker(b.dataset.restart)));
   }catch(e){
-    chatInner.innerHTML=`<div class="dash-empty">agents unavailable</div>`;
+    panelBody.innerHTML=`<div class="dash-empty">agents unavailable</div>`;
   }
 }
 
@@ -599,8 +616,7 @@ async function restartWorker(provider){
 }
 
 async function renderSettings(){
-  hide();
-  chatInner.innerHTML='<div class="dash-empty">loading settings...</div>';
+  openPanel("settings");
   try{
     const r=await fetch("/api/config");
     const d=await r.json();
@@ -610,7 +626,7 @@ async function renderSettings(){
     const pmOptions=installed.map(p=>`<option value="${esc(p.id)}" ${cfg.pmAgent===p.id?"selected":""}>${esc(p.id)}</option>`).join("");
     const pmAgentDef=provs.find(p=>p.id===cfg.pmAgent);
     const pmModelOptions=(pmAgentDef?.models||[]).map(m=>`<option value="${esc(m.id)}" ${cfg.pmModel===m.id?"selected":""}>${esc(m.label||m.id)}</option>`).join("");
-    chatInner.innerHTML=`<div class="dash">
+    panelBody.innerHTML=`<div class="dash">
       <div class="dash-title">settings</div>
 
       <div class="set-card">
@@ -663,7 +679,7 @@ async function renderSettings(){
       }catch{msg.textContent="✕ save failed";msg.className="set-msg err";}
     });
   }catch(e){
-    chatInner.innerHTML=`<div class="dash-empty">settings unavailable</div>`;
+    panelBody.innerHTML=`<div class="dash-empty">settings unavailable</div>`;
   }
 }
 
@@ -791,7 +807,7 @@ document.getElementById("stopBtn")?.addEventListener("click",()=>{
 });
 document.getElementById("amClose")?.addEventListener("click",()=>{document.getElementById("answerModal").style.display="none";});
 document.getElementById("answerModal")?.addEventListener("click",(e)=>{if(e.target.id==="answerModal")e.currentTarget.style.display="none";});
-document.addEventListener("keydown",(e)=>{if(e.key==="Escape"){const m=document.getElementById("answerModal");if(m)m.style.display="none";}});
+document.addEventListener("keydown",(e)=>{if(e.key==="Escape"){const m=document.getElementById("answerModal");if(m)m.style.display="none";const pm=document.getElementById("panelModal");if(pm)pm.style.display="none";}});
 inp.addEventListener("compositionstart",()=>{composing=true});
 inp.addEventListener("compositionend",()=>{composing=false});
 inp.addEventListener("keydown",(e)=>{if(e.key==="Enter"&&!e.shiftKey&&!composing){e.preventDefault();send()}});
