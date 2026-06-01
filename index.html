@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Lun — One question. Multiple minds.</title>
-<meta name="description" content="Lun (論) is a CLI tool that asks multiple AI coding agents the same question in parallel and shows their answers side-by-side. Open source on GitHub." />
+<title>Lun — Run your AI coding agents side-by-side. No API keys.</title>
+<meta name="description" content="Lun (論) runs the AI coding agent CLIs you already use — Claude Code, Codex, Kiro, Copilot — on the same question, side by side, and lets them debate. No extra API keys, no extra bills. Open source CLI." />
 <meta name="theme-color" content="#000000" />
 
 <!-- Favicon -->
@@ -14,16 +14,16 @@
 
 <!-- Open Graph -->
 <meta property="og:type" content="website" />
-<meta property="og:title" content="Lun — One question. Multiple minds." />
-<meta property="og:description" content="Ask multiple AI coding agents the same question in parallel. Spot consensus, catch blind spots, make better decisions. Open source." />
+<meta property="og:title" content="Lun — Run your AI coding agents side-by-side. No API keys." />
+<meta property="og:description" content="Drives the agent CLIs you already installed (Claude Code, Codex, Kiro, Copilot) on one question — compare answers or let them debate. No extra keys or bills." />
 <meta property="og:url" content="https://lun.soonsoon.io/" />
 <meta property="og:image" content="https://lun.soonsoon.io/assets/og-card.png" />
 <meta property="og:image:width" content="1024" />
 <meta property="og:image:height" content="1024" />
 <meta property="og:site_name" content="Lun" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Lun — One question. Multiple minds." />
-<meta name="twitter:description" content="Ask multiple AI coding agents the same question in parallel. Open source CLI." />
+<meta name="twitter:title" content="Lun — Run your AI coding agents side-by-side. No API keys." />
+<meta name="twitter:description" content="Drives the agent CLIs you already use (Claude Code, Codex, Kiro, Copilot) on one question — compare or debate. Open source." />
 <meta name="twitter:image" content="https://lun.soonsoon.io/assets/og-card.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -63,7 +63,7 @@
     <div class="hero__left">
       <div class="hero__badge">
         <span class="dot"></span>
-        <span data-en="open source · MIT" data-kr="오픈소스 · MIT">open source · MIT</span>
+        <span data-en="open source · no API keys · MIT" data-kr="오픈소스 · API 키 불필요 · MIT">open source · no API keys · MIT</span>
       </div>
 
       <pre class="hero__ascii" aria-hidden="true">      ╦   ╦ ╦ ╔╗╔
@@ -71,15 +71,15 @@
       ╩═╝ ╚═╝ ╝╚╝</pre>
 
       <h1 class="hero__title">
+        <span data-en="Your AI agents." data-kr="당신의 AI 에이전트들.">Your AI agents.</span><br />
         <span data-en="One question." data-kr="하나의 질문.">One question.</span><br />
-        <span data-en="Multiple minds." data-kr="여러 개의 생각.">Multiple minds.</span><br />
-        <span class="hero__title-accent" data-en="Better decisions." data-kr="더 나은 결정.">Better decisions.</span>
+        <span class="hero__title-accent" data-en="Every answer." data-kr="모든 답변.">Every answer.</span>
       </h1>
 
       <p class="hero__sub"
-         data-en="Not sure about that AI answer? Lun asks multiple AI coding agents the same question in parallel and shows their answers side-by-side — so you can spot consensus, catch blind spots, and decide with confidence."
-         data-kr="그 AI 답변, 확신이 안 서나요? Lun은 여러 AI 코딩 에이전트에게 같은 질문을 동시에 던지고 답을 나란히 보여줍니다. 합의를 발견하고, 맹점을 잡아내고, 확신을 갖고 결정하세요.">
-        Not sure about that AI answer? Lun asks multiple AI coding agents the same question in parallel and shows their answers side-by-side — so you can spot consensus, catch blind spots, and decide with confidence.
+         data-en="You already pay for Claude Code, Codex, Kiro, Copilot. Lun runs them side-by-side on the same question — through the CLIs you've already installed and logged into. No extra API keys, no extra bills. Then they can even debate each other."
+         data-kr="이미 Claude Code, Codex, Kiro, Copilot에 돈을 내고 있잖아요. Lun은 그것들을 같은 질문에 나란히 돌립니다 — 이미 설치하고 로그인해 둔 CLI를 그대로 통해서요. 추가 API 키도, 추가 청구서도 없습니다. 게다가 서로 토론까지 시킬 수 있어요.">
+        You already pay for Claude Code, Codex, Kiro, Copilot. Lun runs them side-by-side on the same question — through the CLIs you've already installed and logged into. No extra API keys, no extra bills. Then they can even debate each other.
       </p>
 
       <div class="hero__cta">
@@ -147,13 +147,13 @@
     <h2 class="section__title" data-en="What is Lun?" data-kr="Lun이란?">What is Lun?</h2>
   </div>
   <div class="prose">
-    <p data-en="<strong>Lun (論)</strong> means “discussion.” It's a command-line tool that turns a single prompt into a parallel debate across your installed AI coding agents — then puts the answers next to each other so the differences are obvious."
-       data-kr="<strong>Lun(論)</strong>은 “논의”라는 뜻입니다. 하나의 프롬프트를 설치된 여러 AI 코딩 에이전트의 병렬 토론으로 바꾸고, 답변을 나란히 놓아 차이를 한눈에 보여주는 커맨드라인 도구입니다.">
-      <strong>Lun (論)</strong> means "discussion." It's a command-line tool that turns a single prompt into a parallel debate across your installed AI coding agents — then puts the answers next to each other so the differences are obvious.
+    <p data-en="<strong>Lun (論)</strong> means “discussion.” Most multi-model tools want your API keys and bill you per token. Lun doesn't. It drives the agent CLIs you've <strong>already installed and authenticated</strong> — Claude Code, Codex, Kiro, Copilot, Antigravity — so there's nothing new to pay for or set up."
+       data-kr="<strong>Lun(論)</strong>은 “논의”라는 뜻입니다. 대부분의 멀티모델 도구는 당신의 API 키를 요구하고 토큰당 과금합니다. Lun은 다릅니다. 당신이 <strong>이미 설치하고 인증해 둔</strong> 에이전트 CLI — Claude Code, Codex, Kiro, Copilot, Antigravity — 를 그대로 구동합니다. 새로 결제하거나 설정할 게 없습니다.">
+      <strong>Lun (論)</strong> means "discussion." Most multi-model tools want your API keys and bill you per token. Lun doesn't. It drives the agent CLIs you've <strong>already installed and authenticated</strong> — Claude Code, Codex, Kiro, Copilot, Antigravity — so there's nothing new to pay for or set up.
     </p>
-    <p data-en="Results stream in as each agent finishes. No waiting for the slowest one. Everything runs locally through the CLIs you already have."
-       data-kr="각 에이전트가 끝나는 대로 결과가 스트리밍됩니다. 가장 느린 에이전트를 기다릴 필요가 없습니다. 모든 것은 이미 설치된 CLI를 통해 로컬에서 실행됩니다.">
-      Results stream in as each agent finishes. No waiting for the slowest one. Everything runs locally through the CLIs you already have.
+    <p data-en="Ask one question, get every agent's answer side-by-side. Or let them <strong>debate each other</strong> in a relay where each one sees and challenges the last. Results stream in as each finishes — no waiting for the slowest."
+       data-kr="하나의 질문에 모든 에이전트의 답을 나란히 받으세요. 또는 각 에이전트가 앞 에이전트의 답을 보고 반박하는 릴레이 방식으로 <strong>서로 토론</strong>시킬 수도 있습니다. 결과는 끝나는 대로 스트리밍되어, 가장 느린 에이전트를 기다리지 않습니다.">
+      Ask one question, get every agent's answer side-by-side. Or let them <strong>debate each other</strong> in a relay where each one sees and challenges the last. Results stream in as each finishes — no waiting for the slowest.
     </p>
   </div>
 </section>
