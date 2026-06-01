@@ -1,0 +1,45 @@
+name: Release
+
+# Publish to npm when a version tag is pushed, e.g.:
+#   npm version patch   # bumps package.json + creates a git tag
+#   git push --follow-tags
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # for npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm install
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Run tests
+        run: npm test
+
+      # Safety: the tag must match the version in package.json
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "Tag $TAG does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

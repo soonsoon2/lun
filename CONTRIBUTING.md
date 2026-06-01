@@ -76,6 +76,24 @@ must always be passed as a single argv element.
 - Match the existing style of the file you're editing.
 - Prefer small, readable functions over cleverness.
 
+## Releasing (maintainers)
+
+Releases publish `@soonsoon2/lun` to npm automatically via GitHub Actions
+(`.github/workflows/release.yml`) when a `v*` tag is pushed:
+
+```bash
+npm version patch    # or minor / major — bumps package.json + makes a git tag
+git push --follow-tags
+```
+
+The workflow runs `check` + `test`, verifies the tag matches
+`package.json`, then `npm publish`. One-time setup: add an npm
+**automation** access token (bypasses 2FA for CI) as the repo secret
+`NPM_TOKEN` (Settings → Secrets and variables → Actions). Create it with
+`npm token create` or on npmjs.com under Access Tokens.
+
+To publish manually instead: `npm publish --access public` (requires 2FA OTP).
+
 ## Reporting security issues
 
 Please do **not** open a public issue for security vulnerabilities. See
