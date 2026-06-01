@@ -42,6 +42,7 @@
   <div class="nav__links">
     <a class="nav__link" href="#what" data-en="What" data-kr="소개">What</a>
     <a class="nav__link" href="#how" data-en="How" data-kr="작동">How</a>
+    <a class="nav__link" href="#modes" data-en="Modes" data-kr="모드">Modes</a>
     <a class="nav__link" href="#why" data-en="Why" data-kr="이유">Why</a>
     <a class="nav__link" href="#install" data-en="Install" data-kr="설치">Install</a>
     <a class="nav__link" href="#agents" data-en="Agents" data-kr="에이전트">Agents</a>
@@ -240,10 +241,46 @@
   </figure>
 </section>
 
+<!-- ───────────────────────── MODES ───────────────────────── -->
+<section class="section" id="modes">
+  <div class="section__head">
+    <span class="section__num">03</span>
+    <h2 class="section__title" data-en="Three modes" data-kr="세 가지 모드">Three modes</h2>
+  </div>
+  <p class="section__lead"
+     data-en="Your agents can work three ways on a question. The same engine powers all of them — and debate is the one most tools don't have."
+     data-kr="당신의 에이전트는 한 질문을 세 가지 방식으로 다룰 수 있습니다. 같은 엔진이 셋 다 구동하고, 그중 ‘토론’은 대부분의 도구에 없는 모드입니다.">
+    Your agents can work three ways on a question. The same engine powers all of them — and debate is the one most tools don't have.
+  </p>
+
+  <div class="modes">
+    <div class="mode">
+      <span class="mode__key">lun "q"</span>
+      <h3 data-en="Compare" data-kr="비교">Compare</h3>
+      <p data-en="Every agent answers the same question in parallel. Answers stream in side by side as each finishes; add -s for a consensus summary." data-kr="모든 에이전트가 같은 질문에 병렬로 답합니다. 끝나는 순서대로 나란히 스트리밍되고, -s를 붙이면 합의 요약이 더해집니다.">Every agent answers the same question in parallel. Answers stream in side by side as each finishes; add <code>-s</code> for a consensus summary.</p>
+    </div>
+    <div class="mode mode--star">
+      <span class="mode__key">lun -d</span>
+      <h3 data-en="Debate ★" data-kr="토론 ★">Debate ★</h3>
+      <p data-en="A relay discussion — each agent sees the previous answers and challenges them, while a moderator synthesizes each round. This is where blind spots actually surface, because the agents argue instead of just listing opinions." data-kr="릴레이 토론 — 각 에이전트가 앞선 답을 보고 반박하고, 모더레이터가 매 라운드를 종합합니다. 단순 의견 나열이 아니라 서로 논쟁하기 때문에, 여기서 진짜 맹점이 드러납니다.">A relay discussion — each agent sees the previous answers and challenges them, while a moderator synthesizes each round. This is where blind spots actually surface, because the agents argue instead of just listing opinions.</p>
+    </div>
+    <div class="mode">
+      <span class="mode__key">lun chat</span>
+      <h3 data-en="PM chat" data-kr="PM 챗">PM chat</h3>
+      <p data-en="A conversation led by a PM agent that decides which specialists to consult, calls them as tools, and synthesizes — with history across turns." data-kr="PM 에이전트가 어떤 전문가를 부를지 정하고, 도구처럼 호출해, 종합까지 해주는 대화 모드입니다. 턴 간 히스토리도 유지됩니다.">A conversation led by a PM agent that decides which specialists to consult, calls them as tools, and synthesizes — with history across turns.</p>
+    </div>
+  </div>
+  <p class="section__foot"
+     data-en="Run any mode in the terminal, the web UI (lun serve), VS Code (@lun), or from another agent (lun -j)."
+     data-kr="어떤 모드든 터미널, 웹 UI(lun serve), VS Code(@lun), 또는 다른 에이전트(lun -j)에서 실행할 수 있습니다.">
+    Run any mode in the terminal, the web UI (<code>lun serve</code>), VS Code (<code>@lun</code>), or from another agent (<code>lun -j</code>).
+  </p>
+</section>
+
 <!-- ───────────────────────── WHY ───────────────────────── -->
 <section class="section" id="why">
   <div class="section__head">
-    <span class="section__num">03</span>
+    <span class="section__num">04</span>
     <h2 class="section__title" data-en="Why multiple minds?" data-kr="왜 여러 개의 생각인가?">Why multiple minds?</h2>
   </div>
   <p class="section__lead"
@@ -275,7 +312,7 @@
 <!-- ───────────────────────── INSTALL ───────────────────────── -->
 <section class="section" id="install">
   <div class="section__head">
-    <span class="section__num">04</span>
+    <span class="section__num">05</span>
     <h2 class="section__title" data-en="Install &amp; run" data-kr="설치 &amp; 실행">Install &amp; run</h2>
   </div>
   <p class="section__lead"
@@ -315,7 +352,7 @@ lun -s <span class="c-str">"Redis vs Memcached for session storage?"</span></cod
 <!-- ───────────────────────── FEATURES ───────────────────────── -->
 <section class="section section--alt" id="features">
   <div class="section__head">
-    <span class="section__num">05</span>
+    <span class="section__num">06</span>
     <h2 class="section__title" data-en="More than a one-liner" data-kr="한 줄 그 이상">More than a one-liner</h2>
   </div>
   <div class="features">
@@ -360,7 +397,7 @@ lun -s <span class="c-str">"Redis vs Memcached for session storage?"</span></cod
 <!-- ───────────────────────── AGENTS ───────────────────────── -->
 <section class="section" id="agents">
   <div class="section__head">
-    <span class="section__num">06</span>
+    <span class="section__num">07</span>
     <h2 class="section__title" data-en="Supported agents" data-kr="지원 에이전트">Supported agents</h2>
   </div>
   <p class="section__lead"
@@ -381,7 +418,7 @@ lun -s <span class="c-str">"Redis vs Memcached for session storage?"</span></cod
 <!-- ───────────────────────── AGENT INTEGRATION ───────────────────────── -->
 <section class="section section--alt" id="integrate">
   <div class="section__head">
-    <span class="section__num">07</span>
+    <span class="section__num">08</span>
     <h2 class="section__title" data-en="Built for agents too" data-kr="에이전트를 위한 도구이기도">Built for agents too</h2>
   </div>
   <p class="section__lead"
@@ -416,7 +453,7 @@ lun -s <span class="c-str">"Redis vs Memcached for session storage?"</span></cod
 <!-- ───────────────────────── MAKER / STORY ───────────────────────── -->
 <section class="section" id="story">
   <div class="section__head">
-    <span class="section__num">08</span>
+    <span class="section__num">09</span>
     <h2 class="section__title" data-en="Why I built this" data-kr="왜 만들었나">Why I built this</h2>
   </div>
 
