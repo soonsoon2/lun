@@ -86,11 +86,11 @@ npm version patch    # or minor / major — bumps package.json + makes a git tag
 git push --follow-tags
 ```
 
-The workflow runs `check` + `test`, verifies the tag matches
-`package.json`, then `npm publish`. One-time setup: add an npm
-**automation** access token (bypasses 2FA for CI) as the repo secret
-`NPM_TOKEN` (Settings → Secrets and variables → Actions). Create it with
-`npm token create` or on npmjs.com under Access Tokens.
+The workflow runs `check` + `test`, verifies the tag matches `package.json`,
+then publishes. Authentication uses npm **Trusted Publishing (OIDC)** — no
+long-lived token is stored. (One-time setup, already done: npmjs.com →
+package → Settings → Trusted Publisher → GitHub Actions, repo `soonsoon2/lun`,
+workflow `release.yml`.)
 
 To publish manually instead: `npm publish --access public` (requires 2FA OTP).
 
