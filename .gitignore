@@ -18,8 +18,20 @@ test-ws-codex.js
 bench-*.sh
 test-scenarios.sh
 
+# Local-only marketing/demo artifacts (the launch-post debate recording)
+demo/lun-debate.*
+demo/demo-debate.tape
+demo/_debate-check.png
+
 # Internal design work (image-gen scripts contain dev API keys — local only)
 design/
+
+# Marketing drafts (local-only, not for distribution)
+marketing/
+
+# Landing site source — deployed to the gh-pages branch, not tracked on main
+site/
+site-hub/
 
 # Local agent work area
 lun-workspace/
