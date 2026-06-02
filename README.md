@@ -27,7 +27,7 @@
 
 ## What is Lun?
 
-**Lun (論)** runs the AI coding agent CLIs you **already use** — Kiro, Claude Code, GitHub Copilot, Antigravity, Codex — on the same question, side by side. Compare their answers, or let them debate each other.
+**Lun (論)** runs the AI coding agent CLIs you **already use** — Kiro, Claude Code, GitHub Copilot, Antigravity, Codex — on the same question, side by side. Compare their answers, or let them discuss it with each other.
 
 Most multi-model tools want your API keys and bill you per token. Lun doesn't: it drives the CLIs you've already installed and logged into, so there are **no extra API keys and no extra bills**. Cline is also defined as an optional provider when its CLI is available.
 
@@ -82,7 +82,7 @@ lun "Should I use REST or GraphQL for this API?"
 lun -s "Redis vs Memcached for sessions?"   # + consensus summary
 ```
 
-### 2. Debate — `lun -d` ⭐
+### 2. Discuss — `lun -d` ⭐
 
 Not just parallel answers — a **relay discussion**. Each agent sees what the previous ones said and can challenge it; a moderator synthesizes each round and decides whether to continue. This is where blind spots actually surface, because the agents argue instead of just listing opinions.
 
@@ -157,7 +157,7 @@ lun --init
 # Compare: ask everyone the same thing
 lun "How should I structure this microservice?"
 
-# Debate: let them challenge each other
+# Discuss: let them challenge each other
 lun -d "Is a monorepo the right call for a 4-person team?"
 
 # Pipe a file as context
@@ -169,7 +169,7 @@ lun -M claude:opus,copilot:gpt-4.1 "Review this architecture"
 
 ---
 
-## What debate looks like
+## What discuss mode looks like
 
 `lun -d` is the mode that sets Lun apart. Instead of parallel monologues, each agent sees the previous answers and pushes back, and a moderator synthesizes each round:
 
